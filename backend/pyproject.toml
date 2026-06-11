@@ -48,6 +48,13 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.flake8-bugbear]
+# Idiom FastAPI: dependency/param sebagai default argumen bukan mutable-default sungguhan.
+extend-immutable-calls = [
+  "fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Header",
+  "fastapi.Body", "fastapi.Form", "fastapi.File",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
