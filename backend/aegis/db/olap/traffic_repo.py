@@ -43,10 +43,14 @@ def write_event(
     weboptin_status: str,
     rules_version: int | None,
     model_version: int | None,
+    device_info: dict | None = None,
+    is_webview: bool | None = None,
+    score_breakdown: dict | None = None,
     settings: Settings | None = None,
 ) -> None:
     s = settings or get_settings()
     client = _get_client(s)
+    di = device_info or {}
     client.insert(
         "traffic_events",
         [[
@@ -56,11 +60,16 @@ def write_event(
             ip_intel.get("isp") or "", ip_intel.get("connection_type") or "",
             1 if ip_intel.get("vpn_proxy_tor") else 0, ip_intel.get("ip_reputation") or "",
             decision, float(final_score or 0.0), weboptin_status,
+            di.get("browser") or "", di.get("os") or "", di.get("device_type") or "",
+            di.get("brand") or "", di.get("model") or "", 1 if is_webview else 0,
+            json.dumps(score_breakdown or {}, default=str),
         ]],
         column_names=[
             "trx_id", "device_id", "service", "source", "pub_id", "signals", "features",
             "ip_country", "ip_asn", "ip_isp", "connection_type", "vpn_proxy_tor",
             "ip_reputation", "decision", "final_score", "weboptin_status",
+            "browser", "os", "device_type", "device_brand", "device_model", "is_webview",
+            "score_breakdown",
         ],
         settings=_ASYNC,
     )

@@ -48,7 +48,7 @@ def session_init(req: SessionInitRequest, request: Request):
 
 
 def _finalize_allow(svc, req: ScoreRequest):
-    """Mint URL web-opt-in via CP; update weboptin_status; balas allow / 502."""
+    """Mint URL web-opt-in via CP; update weboptin_status OLTP; balikkan MintResult."""
     secret = get_service_secret(svc.slug)
     res = mint_weboptin_url(
         svc.cp_api_url, secret,
@@ -56,6 +56,10 @@ def _finalize_allow(svc, req: ScoreRequest):
     )
     with connection() as conn:
         decisions_repo.update_weboptin(conn, req.trx_id, res.weboptin_status, res.host)
+    return res
+
+
+def _allow_response(res):
     if res.weboptin_status == "minted":
         return {"decision": "allow", "redirect_url": res.redirect_url}
     return err(502, "weboptin_unavailable", "tidak dapat mengambil URL web-opt-in")
@@ -83,7 +87,9 @@ def score_endpoint(req: ScoreRequest, request: Request):
     with connection() as conn:
         existing = decisions_repo.get_by_trx(conn, req.trx_id)
     if existing:
-        return _block() if existing["decision"] == "block" else _finalize_allow(svc, req)
+        if existing["decision"] == "block":
+            return _block()
+        return _allow_response(_finalize_allow(svc, req))
 
     device = lookup_or_register(req.signals.fingerprint)
     ip_intel = enrich_ip(ip)
@@ -117,18 +123,28 @@ def score_endpoint(req: ScoreRequest, request: Request):
             reason=outcome.reason,
             weboptin_status="na",
         )
+    # Selesaikan keputusan dulu agar weboptin_status final (minted/failed/na) ikut ke OLAP.
+    if outcome.decision == "block":
+        weboptin_status, response = "na", _block()
+    else:
+        res = _finalize_allow(svc, req)
+        weboptin_status, response = res.weboptin_status, _allow_response(res)
+
+    is_webview = None
+    if req.signals.fingerprint.browser_environment is not None:
+        is_webview = req.signals.fingerprint.browser_environment.is_webview
     try:
         traffic_repo.write_event(
             trx_id=req.trx_id, device_id=device.device_id, service=req.service,
             source=req.source, pub_id=req.pub_id,
             signals=req.signals.model_dump(), features=extract_features(feature_input),
             ip_intel=ip_intel, decision=outcome.decision, final_score=outcome.final_score,
-            weboptin_status="na",  # status mint final di OLTP; OLAP snapshot awal
+            weboptin_status=weboptin_status,
             rules_version=outcome.rules_version, model_version=outcome.model_version,
+            device_info=device_info, is_webview=is_webview,
+            score_breakdown=outcome.score_breakdown,
         )
     except Exception:
         pass  # OLAP loss-tolerant (K4)
 
-    if outcome.decision == "block":
-        return _block()
-    return _finalize_allow(svc, req)
+    return response

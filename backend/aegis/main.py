@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from aegis import __version__
-from aegis.api import callbacks, scoring
+from aegis.api import analytics, callbacks, scoring
 from aegis.config import get_settings
 from aegis.ml.loader import load_active_models
 from aegis.scoring.config import load_active_config
@@ -49,6 +49,7 @@ app.add_middleware(
 
 app.include_router(scoring.router)
 app.include_router(callbacks.router)
+app.include_router(analytics.router)
 
 
 @app.get("/health")
