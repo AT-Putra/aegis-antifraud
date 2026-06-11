@@ -223,6 +223,9 @@ docs/private/
 # Graphify local output (knowledge graph derived from private docs)
 graphify-out/
 
+# Claude Code local/personal settings (permissions) — keep local, not shared
+.claude/settings.local.json
+
 # IP intelligence DB files (license-restricted, large — must NOT be committed)
 data/geoip/
 *.mmdb
