@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     secret_enc_key: str = ""  # master key AES-256-GCM untuk services.hmac_secret (TQ-08)
     billing_hmac_secret: str = ""  # shared secret callback billing (HMAC inbound)
 
+    # Bootstrap admin awal (T-15) — dibuat saat startup bila tabel users kosong
+    admin_bootstrap_username: str = ""
+    admin_bootstrap_password: str = ""
+
     # Lokal & origin
     tz_default: str = "Asia/Jakarta"
     allowed_origins: str = ""

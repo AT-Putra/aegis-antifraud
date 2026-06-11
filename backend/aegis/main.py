@@ -13,17 +13,41 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from aegis import __version__
-from aegis.api import analytics, callbacks, scoring
+from aegis.api import admin, analytics, auth, callbacks, scoring
 from aegis.config import get_settings
+from aegis.db.oltp import users_repo
+from aegis.db.postgres import connection
 from aegis.ml.loader import load_active_models
 from aegis.scoring.config import load_active_config
 from aegis.security.origins import allowed_origins
+from aegis.security.passwords import hash_password
 
 _log = logging.getLogger("aegis.startup")
 
 
+def _bootstrap_admin() -> None:
+    """Buat admin awal bila tabel users kosong (T-15, K2). Idempoten."""
+    s = get_settings()
+    if not (s.admin_bootstrap_username and s.admin_bootstrap_password):
+        return
+    try:
+        with connection() as conn:
+            if users_repo.count(conn) > 0:
+                return
+            users_repo.insert_user(
+                conn,
+                username=s.admin_bootstrap_username,
+                password_hash=hash_password(s.admin_bootstrap_password),
+                role="admin",
+            )
+        _log.info("bootstrap: admin '%s' dibuat", s.admin_bootstrap_username)
+    except Exception as exc:  # noqa: BLE001
+        _log.error("bootstrap admin gagal: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _bootstrap_admin()
     try:
         app.state.config = load_active_config()
     except Exception as exc:  # noqa: BLE001
@@ -50,6 +74,8 @@ app.add_middleware(
 app.include_router(scoring.router)
 app.include_router(callbacks.router)
 app.include_router(analytics.router)
+app.include_router(auth.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")

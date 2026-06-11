@@ -75,6 +75,32 @@ class ConfigUpdate(BaseModel):
     blend_weights: dict
 
 
+class ConfigVersionItem(BaseModel):
+    version: int
+    created_by: UUID | None = None
+    created_at: datetime
+    active: bool
+
+
+# --- Settings ---
+class SettingItem(BaseModel):
+    key: str
+    value: str
+
+
+class SettingUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str
+    value: str
+
+
+# --- Retrain ---
+class RetrainJob(BaseModel):
+    job_id: UUID
+    status: Literal["queued", "running", "done", "failed"]
+    metrics: dict | None = None
+
+
 # --- Feedback ---
 class FeedbackCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
