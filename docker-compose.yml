@@ -79,6 +79,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    volumes:
+      - models:/models          # artefak model (shared api ↔ job retrain T-17)
     mem_limit: ${API_MEM_LIMIT:-2g}
     restart: unless-stopped
     networks: [aegis]
@@ -104,6 +106,7 @@ volumes:
   chdata:
   redisdata:
   caddydata:
+  models:
   caddyconfig:
 
 networks:

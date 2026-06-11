@@ -356,6 +356,25 @@ def decision_detail(trx_id: str, *, settings: Settings | None = None) -> dict | 
     return detail
 
 
+def features_by_trx(
+    trx_ids: list[str], *, settings: Settings | None = None
+) -> dict[str, dict]:
+    """Ambil fitur turunan (JSON) per-trx dari OLAP untuk retraining (T-17, skew-free).
+
+    Bila satu trx punya >1 baris, ambil yang terbaru (argMax ts). Anti train/serve skew:
+    fitur yang dipakai = fitur yang persis dihitung saat inference.
+    """
+    if not trx_ids:
+        return {}
+    s = settings or get_settings()
+    rows = _get_client(s).query(
+        "SELECT trx_id, argMax(features, ts) AS feat FROM traffic_events "
+        "WHERE trx_id IN {trx:Array(String)} AND features != '' GROUP BY trx_id",
+        parameters={"trx": trx_ids},
+    ).result_rows
+    return {r[0]: json.loads(r[1]) for r in rows if r[1]}
+
+
 def recent_decisions(
     since: datetime | None = None, *, limit=20, settings: Settings | None = None
 ) -> list[dict]:
