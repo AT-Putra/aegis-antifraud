@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     tz_default: str = "Asia/Jakarta"
     allowed_origins: str = ""
 
+    # IP intelligence (TQ-07: GeoLite2 + IP2Proxy LITE)
+    geoip_dir: str = "/data/geoip"
+    maxmind_account_id: str = ""
+    maxmind_license_key: str = ""
+    ip2location_token: str = ""
+
     @property
     def postgres_dsn(self) -> str:
         return (

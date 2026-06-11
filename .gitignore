@@ -222,3 +222,12 @@ docs/private/
 
 # Graphify local output (knowledge graph derived from private docs)
 graphify-out/
+
+# IP intelligence DB files (license-restricted, large — must NOT be committed)
+data/geoip/
+*.mmdb
+*.BIN
+
+# ML artifacts & datasets (TRD §3)
+models/
+data/

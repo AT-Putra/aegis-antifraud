@@ -29,6 +29,9 @@ dependencies = [
   "cryptography>=43,<45",
   # Observability
   "prometheus-client~=0.21",
+  # IP intelligence (TQ-07: GeoLite2 + IP2Proxy LITE)
+  "geoip2~=4.8",
+  "IP2Proxy~=3.4",
 ]
 
 [project.optional-dependencies]
