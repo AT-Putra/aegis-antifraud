@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     tz_default: str = "Asia/Jakarta"
     allowed_origins: str = ""
 
+    # Model store (shared, ADR-003)
+    model_dir: str = "/models"
+
     # IP intelligence (TQ-07: GeoLite2 + IP2Proxy LITE)
     geoip_dir: str = "/data/geoip"
     maxmind_account_id: str = ""
