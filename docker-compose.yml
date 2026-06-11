@@ -95,6 +95,7 @@ services:
       - "443:443"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./frontend/prelanding/dist:/srv/prelanding:ro   # bundel pre-landing (T-10; `make prelanding`)
       - caddydata:/data
       - caddyconfig:/config
     mem_limit: ${CADDY_MEM_LIMIT:-256m}

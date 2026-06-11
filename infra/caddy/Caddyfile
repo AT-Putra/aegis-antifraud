@@ -13,9 +13,11 @@
 		reverse_proxy api:8000
 	}
 
-	# Pre-landing statis (placeholder T-01; build asli di T-10)
+	# Pre-landing statis (T-10) — bundel default self-host. Host eksternal pakai bundel sama.
 	handle {
-		respond "Aegis Anti Fraud — pre-landing placeholder" 200
+		root * /srv/prelanding
+		try_files {path} /index.html
+		file_server
 	}
 
 	encode gzip

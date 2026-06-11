@@ -2,7 +2,8 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help up down build logs ps test lint fmt migrate train clean
+.PHONY: help up down build logs ps test lint fmt migrate train clean prelanding prelanding-test
+NODE := docker run --rm -v "$(CURDIR)/frontend/prelanding":/app -w /app node:24
 
 help: ## Tampilkan bantuan
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -35,8 +36,14 @@ fmt: ## Format backend (ruff)
 migrate: ## Jalankan migrasi DB (OLTP + OLAP, idempoten)
 	$(COMPOSE) run --rm api python -m aegis.db.migrate
 
-train: ## Jalankan pipeline retraining (diisi di T-17)
-	@echo "train: belum diimplementasikan (lihat task T-17)"
+train: ## Jalankan pipeline retraining (T-17)
+	$(COMPOSE) run --rm api python -m aegis.jobs.retrain
+
+prelanding: ## Build bundel pre-landing statis → frontend/prelanding/dist (T-10)
+	$(NODE) sh -c "npm ci && npm run build"
+
+prelanding-test: ## Test pre-landing (Vitest+jsdom+MSW)
+	$(NODE) sh -c "npm ci && npm test"
 
 clean: ## Matikan + hapus volume (HATI-HATI: data hilang)
 	$(COMPOSE) down -v
