@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     session_signing_key: str = ""
     jwt_secret: str = ""
     secret_enc_key: str = ""  # master key AES-256-GCM untuk services.hmac_secret (TQ-08)
+    billing_hmac_secret: str = ""  # shared secret callback billing (HMAC inbound)
 
     # Lokal & origin
     tz_default: str = "Asia/Jakarta"
