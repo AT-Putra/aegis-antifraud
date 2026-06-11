@@ -11,7 +11,9 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY aegis ./aegis
 COPY tests ./tests
-RUN pip install --upgrade pip && pip install ".[dev]"
+# Editable install: paket di-link ke /app sehingga file non-Python (mis. *.sql migrasi)
+# ter-resolve lewat Path(__file__) tanpa perlu konfigurasi packaging tambahan.
+RUN pip install --upgrade pip && pip install -e ".[dev]"
 
 EXPOSE 8000
 

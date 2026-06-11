@@ -32,8 +32,8 @@ lint: ## Lint backend (ruff)
 fmt: ## Format backend (ruff)
 	$(COMPOSE) run --rm api ruff format .
 
-migrate: ## Jalankan migrasi DB (diisi di T-02)
-	@echo "migrate: belum diimplementasikan (lihat task T-02)"
+migrate: ## Jalankan migrasi DB (OLTP + OLAP, idempoten)
+	$(COMPOSE) run --rm api python -m aegis.db.migrate
 
 train: ## Jalankan pipeline retraining (diisi di T-17)
 	@echo "train: belum diimplementasikan (lihat task T-17)"
