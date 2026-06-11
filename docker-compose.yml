@@ -1,0 +1,109 @@
+# Aegis Anti Fraud — orkestrasi service inti (T-01, TRD §2/§3/§7, ADR-006).
+# Batas memori PARAMETRIK: default = profil dev hemat (≈8 GB host);
+# nilai produksi penuh TRD di-set via .env (lihat .env.example).
+# Observability (Prometheus/Grafana) ditambahkan di T-18.
+
+services:
+  postgres:
+    image: postgres:18
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      # PostgreSQL 18+: mount di /var/lib/postgresql (bukan /data) — image menyimpan
+      # data di subdir version-specific. Mount lama /data memicu error guard.
+      - pgdata:/var/lib/postgresql
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: ${POSTGRES_MEM_LIMIT:-2g}
+    restart: unless-stopped
+    networks: [aegis]
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.3
+    env_file: .env
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+    volumes:
+      - chdata:/var/lib/clickhouse
+      - ./infra/clickhouse/config.d:/etc/clickhouse-server/config.d:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: ${CLICKHOUSE_MEM_LIMIT:-2g}
+    restart: unless-stopped
+    networks: [aegis]
+
+  redis:
+    image: redis:8.8
+    command: ["redis-server", "--maxmemory", "${REDIS_MAXMEMORY:-384mb}", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: ${REDIS_MEM_LIMIT:-512m}
+    restart: unless-stopped
+    networks: [aegis]
+
+  api:
+    build: ./backend
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: ${API_MEM_LIMIT:-2g}
+    restart: unless-stopped
+    networks: [aegis]
+
+  caddy:
+    image: caddy:2.11
+    env_file: .env
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    mem_limit: ${CADDY_MEM_LIMIT:-256m}
+    restart: unless-stopped
+    networks: [aegis]
+
+volumes:
+  pgdata:
+  chdata:
+  redisdata:
+  caddydata:
+  caddyconfig:
+
+networks:
+  aegis:
+    driver: bridge

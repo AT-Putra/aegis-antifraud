@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!--
+  Batas memori ClickHouse parametrik: menyesuaikan rasio dari RAM yang dilihat
+  container (cgroup mem_limit). Jadi dev (mem_limit kecil) & produksi (mem_limit
+  penuh TRD) otomatis terskala tanpa mengubah nilai absolut. (TRD §7, ADR-002)
+-->
+<clickhouse>
+    <max_server_memory_usage_to_ram_ratio>0.7</max_server_memory_usage_to_ram_ratio>
+    <mark_cache_size>536870912</mark_cache_size>
+</clickhouse>

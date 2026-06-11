@@ -219,3 +219,6 @@ __marimo__/
 
 # Private Docs
 docs/private/
+
+# Graphify local output (knowledge graph derived from private docs)
+graphify-out/

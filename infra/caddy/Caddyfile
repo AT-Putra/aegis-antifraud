@@ -1,0 +1,22 @@
+# Caddy reverse proxy + TLS otomatis (TRD §2, ADR-006).
+# Dev: CADDY_DOMAIN tak di-set → http://localhost (tanpa TLS).
+# Produksi: set CADDY_DOMAIN=domain.anda + CADDY_EMAIL → TLS otomatis.
+
+{$CADDY_DOMAIN:http://localhost} {
+	# Health check scoring API
+	handle /health {
+		reverse_proxy api:8000
+	}
+
+	# API scoring/callback/admin/analytics (kontrak 03 §/v1)
+	handle /v1/* {
+		reverse_proxy api:8000
+	}
+
+	# Pre-landing statis (placeholder T-01; build asli di T-10)
+	handle {
+		respond "Aegis Anti Fraud — pre-landing placeholder" 200
+	}
+
+	encode gzip
+}

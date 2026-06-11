@@ -1,0 +1,10 @@
+# Graphify scan rules (overrides .gitignore for graph building only).
+# Intentionally does NOT exclude docs/private/ so the knowledge graph
+# can index the core PRD/TRD/contracts. The graph output stays local.
+graphify-out/
+.git/
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
