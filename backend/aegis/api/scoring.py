@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
 
 from aegis.api.deps import client_ip, err
 from aegis.cp.client import mint_weboptin_url
@@ -15,10 +14,11 @@ from aegis.features.extract import extract_features
 from aegis.features.ip_intel import enrich_ip
 from aegis.features.schema import FeatureInput
 from aegis.fingerprint.service import lookup_or_register
+from aegis.registry.campaign import get_active_campaign
 from aegis.registry.service import get_active_service, get_service_secret
 from aegis.schemas.scoring import ScoreRequest, SessionInitRequest
 from aegis.scoring.engine import score
-from aegis.security import origins, ratelimit
+from aegis.security import ratelimit
 from aegis.security.tokens import SessionTokenError, issue, verify_and_consume
 
 router = APIRouter(prefix="/v1")
@@ -27,23 +27,28 @@ _RL_LIMIT = 120
 _RL_WINDOW = 60
 
 
-def _check_origin(request: Request) -> JSONResponse | None:
+def _resolve_campaign(req, request: Request):
+    """Validasi service+campaign (milik service) + CORS per-campaign. -> (camp, err|None)."""
+    if get_active_service(req.service) is None:
+        return None, err(404, "service_not_found", "layanan tidak ditemukan / nonaktif")
+    camp = get_active_campaign(req.campaign)
+    if camp is None or camp.service != req.service:
+        return None, err(404, "campaign_not_found", "campaign tidak ditemukan / nonaktif")
     origin = request.headers.get("origin")
-    if origin and not origins.is_allowed_origin(origin):
-        return err(403, "forbidden_origin", "origin tidak diizinkan")
-    return None
+    if origin and origin not in camp.allowed_origins:
+        return None, err(403, "forbidden_origin", "origin tidak diizinkan untuk campaign ini")
+    return camp, None
 
 
 @router.post("/session/init")
 def session_init(req: SessionInitRequest, request: Request):
-    if (resp := _check_origin(request)) is not None:
-        return resp
     ip = client_ip(request) or "unknown"
     if not ratelimit.allow(f"init:{ip}", _RL_LIMIT, _RL_WINDOW):
         return err(429, "rate_limited", "terlalu banyak permintaan")
-    if get_active_service(req.service) is None:
-        return err(404, "service_not_found", "layanan tidak ditemukan / nonaktif")
-    token, expires_at = issue(req.trx_id)
+    _camp, error = _resolve_campaign(req, request)
+    if error is not None:
+        return error
+    token, expires_at = issue(req.trx_id, req.service, req.campaign)
     return {"session_token": token, "expires_at": expires_at.isoformat()}
 
 
@@ -75,13 +80,16 @@ def score_endpoint(req: ScoreRequest, request: Request):
     if not ratelimit.allow(f"score:{ip}", _RL_LIMIT, _RL_WINDOW):
         return err(429, "rate_limited", "terlalu banyak permintaan")
     try:
-        verify_and_consume(req.session_token, req.trx_id)
+        verify_and_consume(req.session_token, req.trx_id, req.service, req.campaign)
     except SessionTokenError:
         return err(401, "invalid_session", "session token tidak valid")
 
     svc = get_active_service(req.service)
     if svc is None:
         return err(404, "service_not_found", "layanan tidak ditemukan / nonaktif")
+    camp = get_active_campaign(req.campaign)
+    if camp is None or camp.service != req.service:
+        return err(404, "campaign_not_found", "campaign tidak ditemukan / nonaktif")
 
     # Replay: kembalikan keputusan pertama (tidak scoring ulang) — TRD §6.
     with connection() as conn:
@@ -113,6 +121,7 @@ def score_endpoint(req: ScoreRequest, request: Request):
             trx_id=req.trx_id,
             device_id=device.device_id,
             service_id=svc.id,
+            campaign_id=camp.id,
             source=req.source,
             pub_id=req.pub_id,
             final_score=outcome.final_score,
@@ -136,13 +145,13 @@ def score_endpoint(req: ScoreRequest, request: Request):
     try:
         traffic_repo.write_event(
             trx_id=req.trx_id, device_id=device.device_id, service=req.service,
-            source=req.source, pub_id=req.pub_id,
+            campaign=req.campaign, source=req.source, pub_id=req.pub_id,
             signals=req.signals.model_dump(), features=extract_features(feature_input),
             ip_intel=ip_intel, decision=outcome.decision, final_score=outcome.final_score,
             weboptin_status=weboptin_status,
             rules_version=outcome.rules_version, model_version=outcome.model_version,
             device_info=device_info, is_webview=is_webview,
-            score_breakdown=outcome.score_breakdown,
+            score_breakdown=outcome.score_breakdown, source_params=req.source_params,
         )
     except Exception:
         pass  # OLAP loss-tolerant (K4)

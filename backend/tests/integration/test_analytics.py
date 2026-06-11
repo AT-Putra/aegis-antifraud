@@ -120,7 +120,8 @@ def test_summary_and_search_shape(ch, client, auth) -> None:
 
     s = client.get("/v1/analytics/summary", params=q, headers=auth).json()
     assert s["total"] == 2 and s["allow"] == 1 and s["block"] == 1
-    assert s["fraud_est"] == 1 and s["complaints"] == 0
+    # fraud_est = Opsi B (allow + sinyal fraud terkonfirmasi via OLTP); tak ada outcome → 0
+    assert s["fraud_est"] == 0 and s["complaints"] == 0
     assert set(s) == {"total", "allow", "block", "weboptin_failed", "fraud_est",
                       "complaints", "charging_fail_breakdown"}
 

@@ -38,12 +38,13 @@ def get_summary(
     to: datetime | None = _To,
     tz: str = "UTC",
     service: str | None = None,
+    campaign: str | None = None,
     source: str | None = None,
     pub_id: str | None = None,
     _claims: dict = _guard,
 ) -> SummaryOut:
     data = analytics_repo.summary(
-        from_, to, service=service, source=source, pub_id=pub_id
+        from_, to, service=service, campaign=campaign, source=source, pub_id=pub_id
     )
     return SummaryOut(**data)
 
@@ -56,6 +57,7 @@ def get_timeseries(
     granularity: str = "day",
     tz: str = "UTC",
     service: str | None = None,
+    campaign: str | None = None,
     source: str | None = None,
     pub_id: str | None = None,
     _claims: dict = _guard,
@@ -63,7 +65,7 @@ def get_timeseries(
     try:
         rows = analytics_repo.timeseries(
             metric, from_, to, granularity=granularity, tz=tz,
-            service=service, source=source, pub_id=pub_id,
+            service=service, campaign=campaign, source=source, pub_id=pub_id,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -77,12 +79,13 @@ def get_breakdown(
     to: datetime | None = _To,
     tz: str = "UTC",
     service: str | None = None,
+    campaign: str | None = None,
     source: str | None = None,
     _claims: dict = _guard,
 ) -> list[BreakdownItem]:
     try:
         rows = analytics_repo.breakdown(
-            dimension, from_, to, tz=tz, service=service, source=source
+            dimension, from_, to, tz=tz, service=service, campaign=campaign, source=source
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -97,6 +100,7 @@ def get_search(
     country: str | None = None,
     asn: int | None = None,
     service: str | None = None,
+    campaign: str | None = None,
     source: str | None = None,
     pub_id: str | None = None,
     from_: datetime | None = _From,
@@ -115,7 +119,7 @@ def get_search(
 ) -> list[SearchResultItem]:
     rows = analytics_repo.search(
         trx_id=trx_id, device_id=device_id, decision=decision, country=country, asn=asn,
-        service=service, source=source, pub_id=pub_id, from_ts=from_, to_ts=to,
+        service=service, campaign=campaign, source=source, pub_id=pub_id, from_ts=from_, to_ts=to,
         webview=webview, browser=browser, device_brand=device_brand,
         device_model=device_model, os=os, charging_status=charging_status, vpn=vpn,
         weboptin_status=weboptin_status, limit=limit, offset=offset,
@@ -139,6 +143,7 @@ def _sse(payload: dict, event: str) -> str:
 def stream(
     tz: str = "UTC",
     service: str | None = None,
+    campaign: str | None = None,
     source: str | None = None,
     pub_id: str | None = None,
     interval: float = Query(default=2.0, ge=0.5, le=30.0),
@@ -153,7 +158,7 @@ def stream(
         while True:
             try:
                 kpi = analytics_repo.summary(
-                    None, None, service=service, source=source, pub_id=pub_id
+                    None, None, service=service, campaign=campaign, source=source, pub_id=pub_id
                 )
                 yield _sse(kpi, "kpi")
                 recent = analytics_repo.recent_decisions(since=last_ts, limit=20)

@@ -81,6 +81,8 @@ if already_processed(header["X-Aegis-Request-Id"]):                   return cac
 | `request_id` | ya | UUID, sama dengan header `X-Aegis-Request-Id` |
 | `requested_at` | ya | ISO 8601 UTC |
 
+> **Catatan (2026-06-11):** dimensi `campaign` (pre-landing portabel, F-16) bersifat **internal Aegis** (atribusi & CORS) → **TIDAK dikirim ke CP**; routing di sisi CP tetap memakai `service`. Payload Aegis→CP **tidak berubah** oleh penambahan campaign.
+
 ## 5. Response (CP → Aegis)
 
 **Sukses (HTTP 200):**

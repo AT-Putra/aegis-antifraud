@@ -9,3 +9,11 @@ class ServiceExistsError(Exception):
 
 class ServiceNotFoundError(Exception):
     """Service tidak ditemukan."""
+
+
+class CampaignExistsError(Exception):
+    """Slug campaign sudah terdaftar."""
+
+
+class CampaignNotFoundError(Exception):
+    """Campaign tidak ditemukan / bukan milik service."""

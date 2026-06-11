@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from aegis.config import get_settings
 from aegis.cp.client import MintResult
+from aegis.registry.campaign import register_campaign
 from aegis.registry.service import register_service
 from aegis.security.hmac_auth import compute_signature
 
@@ -39,6 +40,12 @@ def _service() -> str:
     return slug
 
 
+def _campaign(svc: str) -> str:
+    slug = f"camp-{uuid.uuid4().hex[:12]}"
+    register_campaign(slug, "Camp", svc, [])
+    return slug
+
+
 _HUMAN = {
     "fingerprint": {"canvas_hash": "c1", "webgl": {"renderer": "Mali"},
                     "browser_environment": {"is_webview": False}},
@@ -54,17 +61,32 @@ _BOT = {
 }
 
 
-def _token(client, trx, service) -> str:
-    r = client.post("/v1/session/init", json={"trx_id": trx, "service": service})
+def _token(client, trx, service, campaign) -> str:
+    r = client.post(
+        "/v1/session/init", json={"trx_id": trx, "service": service, "campaign": campaign}
+    )
     assert r.status_code == 200, r.text
     return r.json()["session_token"]
 
 
 def test_session_init_unknown_service(client) -> None:
     svc = _service()
-    assert client.post("/v1/session/init", json={"trx_id": "t1", "service": svc}).status_code == 200
-    r = client.post("/v1/session/init", json={"trx_id": "t2", "service": "nope-xyz"})
+    camp = _campaign(svc)
+    assert client.post(
+        "/v1/session/init", json={"trx_id": "t1", "service": svc, "campaign": camp}
+    ).status_code == 200
+    r = client.post(
+        "/v1/session/init", json={"trx_id": "t2", "service": "nope-xyz", "campaign": camp}
+    )
     assert r.status_code == 404 and r.json()["code"] == "service_not_found"
+
+
+def test_session_init_unknown_campaign(client) -> None:
+    svc = _service()
+    r = client.post(
+        "/v1/session/init", json={"trx_id": "t3", "service": svc, "campaign": "nope-camp"}
+    )
+    assert r.status_code == 404 and r.json()["code"] == "campaign_not_found"
 
 
 def test_score_allow_mint(client, monkeypatch) -> None:
@@ -73,10 +95,11 @@ def test_score_allow_mint(client, monkeypatch) -> None:
         lambda *a, **k: MintResult("minted", redirect_url="https://telco/x?token=1", host="telco"),
     )
     svc = _service()
+    camp = _campaign(svc)
     trx = f"trx-{uuid.uuid4().hex[:12]}"
-    tok = _token(client, trx, svc)
+    tok = _token(client, trx, svc, camp)
     r = client.post("/v1/score", json={
-        "trx_id": trx, "service": svc, "session_token": tok,
+        "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "signals": _HUMAN,
     })
     assert r.status_code == 200, r.text
@@ -86,10 +109,11 @@ def test_score_allow_mint(client, monkeypatch) -> None:
 
 def test_score_block_hard_rule(client) -> None:
     svc = _service()
+    camp = _campaign(svc)
     trx = f"trx-{uuid.uuid4().hex[:12]}"
-    tok = _token(client, trx, svc)
+    tok = _token(client, trx, svc, camp)
     r = client.post("/v1/score", json={
-        "trx_id": trx, "service": svc, "session_token": tok,
+        "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "signals": _BOT,
     })
     assert r.status_code == 200
@@ -103,10 +127,11 @@ def test_score_weboptin_unavailable(client, monkeypatch) -> None:
         lambda *a, **k: MintResult("failed", reason="cp_error"),
     )
     svc = _service()
+    camp = _campaign(svc)
     trx = f"trx-{uuid.uuid4().hex[:12]}"
-    tok = _token(client, trx, svc)
+    tok = _token(client, trx, svc, camp)
     r = client.post("/v1/score", json={
-        "trx_id": trx, "service": svc, "session_token": tok,
+        "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "signals": _HUMAN,
     })
     assert r.status_code == 502 and r.json()["code"] == "weboptin_unavailable"

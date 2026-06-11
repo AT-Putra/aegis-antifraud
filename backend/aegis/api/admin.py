@@ -18,9 +18,18 @@ from aegis.db.oltp import (
     users_repo,
 )
 from aegis.db.postgres import connection
+from aegis.registry import campaign as campaign_registry
 from aegis.registry import service as registry
-from aegis.registry.errors import ServiceExistsError, ServiceNotFoundError
+from aegis.registry.errors import (
+    CampaignExistsError,
+    CampaignNotFoundError,
+    ServiceExistsError,
+    ServiceNotFoundError,
+)
 from aegis.schemas.admin import (
+    CampaignCreate,
+    CampaignOut,
+    CampaignUpdate,
     ConfigOut,
     ConfigUpdate,
     ConfigVersionItem,
@@ -37,6 +46,7 @@ from aegis.schemas.admin import (
     UserOut,
     UserUpdate,
 )
+from aegis.security import origins
 from aegis.security.passwords import hash_password
 from aegis.services import feedback as feedback_svc
 
@@ -223,3 +233,41 @@ def update_service(service_id: str, req: ServiceUpdate, _admin: dict = Depends(c
         return err(404, "service_not_found", "service tidak ditemukan")
     except ValueError as exc:
         return err(400, "invalid_service", str(exc))
+
+
+# --- Campaign registry (pre-landing portabel; F-16) ---
+@router.get("/admin/campaigns", response_model=list[CampaignOut])
+def list_campaigns(
+    service: str | None = None, _admin: dict = Depends(current_admin)
+) -> list[CampaignOut]:
+    return campaign_registry.list_campaigns(service)
+
+
+@router.post("/admin/campaigns")
+def create_campaign(req: CampaignCreate, _admin: dict = Depends(current_admin)):
+    try:
+        out = campaign_registry.register_campaign(
+            req.slug, req.name, req.service, req.allowed_origins
+        )
+    except CampaignExistsError:
+        return err(409, "campaign_exists", "slug campaign sudah dipakai")
+    except ServiceNotFoundError:
+        return err(404, "service_not_found", "service tidak ditemukan")
+    except ValueError as exc:
+        return err(400, "invalid_campaign", str(exc))
+    origins.invalidate_cache()  # CORS dinamis (D1) lihat origin campaign baru
+    return {"id": str(out.id)}
+
+
+@router.put("/admin/campaigns/{campaign_id}", response_model=CampaignOut)
+def update_campaign(campaign_id: str, req: CampaignUpdate, _admin: dict = Depends(current_admin)):
+    try:
+        out = campaign_registry.update_campaign(
+            campaign_id, name=req.name, allowed_origins=req.allowed_origins, status=req.status,
+        )
+    except CampaignNotFoundError:
+        return err(404, "campaign_not_found", "campaign tidak ditemukan")
+    except ValueError as exc:
+        return err(400, "invalid_campaign", str(exc))
+    origins.invalidate_cache()
+    return out

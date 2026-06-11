@@ -24,9 +24,9 @@ _client = None
 # dimension breakdown → kolom OLAP (allowlist; cegah injeksi nama kolom).
 _DIM_COLUMN: dict[str, str] = {
     "service": "service",
+    "campaign": "campaign",
     "source": "source",
     "pub_id": "pub_id",
-    "campaign": "source",  # alias: kampanye dipetakan ke source (rilis-1)
     "country": "ip_country",
     "asn": "toString(ip_asn)",
     "decision": "decision",
@@ -73,12 +73,15 @@ def _naive_utc(dt: datetime) -> datetime:
     return dt
 
 
-def _scope(params: dict, *, service=None, source=None, pub_id=None) -> list[str]:
-    """Klausa WHERE atribusi berjenjang untuk OLAP. Mutasi `params`."""
+def _scope(params: dict, *, service=None, campaign=None, source=None, pub_id=None) -> list[str]:
+    """Klausa WHERE atribusi berjenjang OLAP (service→campaign→source→pub_id). Mutasi `params`."""
     clauses: list[str] = []
     if service:
         clauses.append("service = {service:String}")
         params["service"] = service
+    if campaign:
+        clauses.append("campaign = {campaign:String}")
+        params["campaign"] = campaign
     if source:
         clauses.append("source = {source:String}")
         params["source"] = source
@@ -88,36 +91,52 @@ def _scope(params: dict, *, service=None, source=None, pub_id=None) -> list[str]
     return clauses
 
 
+def _decisions_scope(
+    *, service=None, campaign=None, source=None, pub_id=None
+) -> tuple[str, str, list]:
+    """Scoping berjenjang OLTP via `decisions d`. -> (join_sql, where_extra, args_terurut).
+
+    Argumen dikembalikan SESUAI URUTAN KEMUNCULAN di SQL: join (service, campaign) lebih dulu,
+    lalu where_extra (source, pub_id). Pemanggil menyisipkan filter waktu di antara keduanya.
+    """
+    join, extra, join_args, extra_args = "", "", [], []
+    if service:
+        join += " JOIN services sv ON sv.id = d.service_id AND sv.slug = %s"
+        join_args.append(service)
+    if campaign:
+        join += " JOIN campaigns cp ON cp.id = d.campaign_id AND cp.slug = %s"
+        join_args.append(campaign)
+    if source:
+        extra += " AND d.source = %s"
+        extra_args.append(source)
+    if pub_id:
+        extra += " AND d.pub_id = %s"
+        extra_args.append(pub_id)
+    return join, extra, (join_args, extra_args)
+
+
 def _charging_kpis(
-    from_ts: datetime, to_ts: datetime, *, service=None, source=None, pub_id=None
+    from_ts: datetime, to_ts: datetime, *, service=None, campaign=None, source=None, pub_id=None
 ) -> tuple[int, dict[str, int]]:
     """complaints + charging_fail_breakdown dari OLTP outcomes (scoping berjenjang opsional)."""
-    join = ""
-    where = ["o.received_at >= %s", "o.received_at < %s"]
-    args: list = [from_ts, to_ts]
-    if service or source or pub_id:
-        join = " JOIN decisions d ON d.trx_id = o.trx_id"
-        if service:
-            join += " JOIN services sv ON sv.id = d.service_id"
-            where.append("sv.slug = %s")
-            args.append(service)
-        if source:
-            where.append("d.source = %s")
-            args.append(source)
-        if pub_id:
-            where.append("d.pub_id = %s")
-            args.append(pub_id)
-    wsql = " AND ".join(where)
+    join, extra, (join_args, extra_args) = _decisions_scope(
+        service=service, campaign=campaign, source=source, pub_id=pub_id
+    )
+    if join:  # outcomes butuh tautan ke decisions utk scoping
+        join = " JOIN decisions d ON d.trx_id = o.trx_id" + join
+    # Urutan args: join (service,campaign) → waktu (lo,hi) → extra (source,pub_id).
+    args = [*join_args, from_ts, to_ts, *extra_args]
+    base = "o.received_at >= %s AND o.received_at < %s" + extra
     with connection() as conn, conn.cursor() as cur:
         cur.execute(
             f"SELECT count(*) FROM outcomes o{join} "
-            f"WHERE o.callback_type = 'complaint' AND {wsql}",
+            f"WHERE o.callback_type = 'complaint' AND {base}",
             args,
         )
         complaints = int(cur.fetchone()[0])
         cur.execute(
             f"SELECT o.charging_fail_reason, count(*) FROM outcomes o{join} "
-            f"WHERE o.charging_status = 'failed' AND {wsql} "
+            f"WHERE o.charging_status = 'failed' AND {base} "
             "GROUP BY o.charging_fail_reason",
             args,
         )
@@ -125,15 +144,37 @@ def _charging_kpis(
     return complaints, breakdown
 
 
+def _fraud_est(
+    from_ts: datetime, to_ts: datetime, *, service=None, campaign=None, source=None, pub_id=None
+) -> int:
+    """fraud_est = Opsi B: trx allow + sinyal fraud terkonfirmasi (komplain / daily_limit /
+    accepted-feedback robot). Scoping berjenjang via decisions. 0 saat cold-start."""
+    join, extra, (join_args, extra_args) = _decisions_scope(
+        service=service, campaign=campaign, source=source, pub_id=pub_id
+    )
+    args = [*join_args, from_ts, to_ts, *extra_args]
+    sql = (
+        "SELECT count(DISTINCT d.trx_id) FROM decisions d" + join + " WHERE d.decision = 'allow' "
+        "AND d.created_at >= %s AND d.created_at < %s" + extra + " AND ("
+        " EXISTS (SELECT 1 FROM outcomes o WHERE o.trx_id = d.trx_id AND "
+        "  (o.callback_type = 'complaint' OR o.charging_fail_reason = 'daily_limit_reached'))"
+        " OR EXISTS (SELECT 1 FROM feedback f WHERE f.trx_id = d.trx_id AND "
+        "  f.review_status = 'accepted' AND f.flagged_label = 'robot'))"
+    )
+    with connection() as conn, conn.cursor() as cur:
+        cur.execute(sql, args)
+        return int(cur.fetchone()[0])
+
+
 def summary(
-    from_ts=None, to_ts=None, *, service=None, source=None, pub_id=None,
+    from_ts=None, to_ts=None, *, service=None, campaign=None, source=None, pub_id=None,
     settings: Settings | None = None,
 ) -> dict:
     s = settings or get_settings()
     lo, hi = _range(from_ts, to_ts)
     params: dict = {"lo": lo, "hi": hi}
     where = ["ts >= {lo:DateTime}", "ts < {hi:DateTime}", *_scope(
-        params, service=service, source=source, pub_id=pub_id
+        params, service=service, campaign=campaign, source=source, pub_id=pub_id
     )]
     row = _get_client(s).query(
         "SELECT count() AS total, "
@@ -145,14 +186,17 @@ def summary(
     ).result_rows
     total, allow, block, weboptin_failed = (row[0] if row else (0, 0, 0, 0))
     complaints, charging_fail = _charging_kpis(
-        lo, hi, service=service, source=source, pub_id=pub_id
+        lo, hi, service=service, campaign=campaign, source=source, pub_id=pub_id
+    )
+    fraud_est = _fraud_est(
+        lo, hi, service=service, campaign=campaign, source=source, pub_id=pub_id
     )
     return {
         "total": int(total),
         "allow": int(allow),
         "block": int(block),
         "weboptin_failed": int(weboptin_failed),
-        "fraud_est": int(block),  # proxy rilis-1: jumlah keputusan block
+        "fraud_est": fraud_est,  # Opsi B: fraud lolos (sinyal terkonfirmasi)
         "complaints": complaints,
         "charging_fail_breakdown": charging_fail,
     }
@@ -160,7 +204,7 @@ def summary(
 
 def timeseries(
     metric: str, from_ts=None, to_ts=None, *, granularity="day", tz="UTC",
-    service=None, source=None, pub_id=None, settings: Settings | None = None,
+    service=None, campaign=None, source=None, pub_id=None, settings: Settings | None = None,
 ) -> list[dict]:
     if metric not in _METRIC_AGG:
         raise ValueError(f"metric tidak dikenal: {metric}")
@@ -169,7 +213,7 @@ def timeseries(
     lo, hi = _range(from_ts, to_ts)
     params: dict = {"lo": lo, "hi": hi, "tz": tz}
     where = ["ts >= {lo:DateTime}", "ts < {hi:DateTime}", *_scope(
-        params, service=service, source=source, pub_id=pub_id
+        params, service=service, campaign=campaign, source=source, pub_id=pub_id
     )]
     rows = _get_client(s).query(
         f"SELECT {bucket_fn}(toTimeZone(ts, {{tz:String}})) AS bucket, "
@@ -183,7 +227,8 @@ def timeseries(
 
 def breakdown(
     dimension: str, from_ts=None, to_ts=None, *, tz="UTC",
-    service=None, source=None, pub_id=None, limit=100, settings: Settings | None = None,
+    service=None, campaign=None, source=None, pub_id=None, limit=100,
+    settings: Settings | None = None,
 ) -> list[dict]:
     col = _DIM_COLUMN.get(dimension)
     if col is None:
@@ -192,7 +237,7 @@ def breakdown(
     lo, hi = _range(from_ts, to_ts)
     params: dict = {"lo": lo, "hi": hi, "lim": int(limit)}
     where = ["ts >= {lo:DateTime}", "ts < {hi:DateTime}", *_scope(
-        params, service=service, source=source, pub_id=pub_id
+        params, service=service, campaign=campaign, source=source, pub_id=pub_id
     )]
     rows = _get_client(s).query(
         f"SELECT {col} AS key, count() AS cnt FROM traffic_events "
@@ -214,7 +259,7 @@ def _charging_trx_ids(charging_status: str, lo: datetime, hi: datetime) -> list[
 
 def search(
     *, trx_id=None, device_id=None, decision=None, country=None, asn=None,
-    service=None, source=None, pub_id=None, from_ts=None, to_ts=None,
+    service=None, campaign=None, source=None, pub_id=None, from_ts=None, to_ts=None,
     webview=None, browser=None, device_brand=None, device_model=None, os=None,
     charging_status=None, vpn=None, weboptin_status=None,
     limit=50, offset=0, settings: Settings | None = None,
@@ -223,7 +268,7 @@ def search(
     lo, hi = _range(from_ts, to_ts)
     params: dict = {"lo": lo, "hi": hi, "lim": int(limit), "off": int(offset)}
     where = ["ts >= {lo:DateTime}", "ts < {hi:DateTime}", *_scope(
-        params, service=service, source=source, pub_id=pub_id
+        params, service=service, campaign=campaign, source=source, pub_id=pub_id
     )]
 
     def eq(col: str, name: str, val, typ="String"):
@@ -263,13 +308,14 @@ def search(
 
     rows = _get_client(s).query(
         "SELECT trx_id, device_id, service, source, pub_id, decision, weboptin_status, "
-        "final_score, ts FROM traffic_events "
+        "final_score, ts, campaign FROM traffic_events "
         f"WHERE {' AND '.join(where)} ORDER BY ts DESC LIMIT {{lim:UInt32}} OFFSET {{off:UInt32}}",
         parameters=params,
     ).result_rows
     return [
         {
             "trx_id": r[0], "device_id": r[1] or None, "service": r[2] or None,
+            "campaign": r[9] or None,
             "source": r[3] or None, "pub_id": r[4] or None, "decision": r[5],
             "weboptin_status": r[6] or None, "final_score": float(r[7]), "ts": r[8],
         }
@@ -306,7 +352,8 @@ def decision_detail(trx_id: str, *, settings: Settings | None = None) -> dict | 
         "SELECT trx_id, device_id, service, source, pub_id, decision, weboptin_status, "
         "final_score, signals, ip_country, ip_asn, ip_isp, connection_type, vpn_proxy_tor, "
         "ip_reputation, browser, os, device_type, device_brand, device_model, is_webview, "
-        "score_breakdown FROM traffic_events WHERE trx_id = {trx:String} ORDER BY ts DESC LIMIT 1",
+        "score_breakdown, campaign FROM traffic_events WHERE trx_id = {trx:String} "
+        "ORDER BY ts DESC LIMIT 1",
         parameters={"trx": trx_id},
     ).result_rows
 
@@ -319,6 +366,7 @@ def decision_detail(trx_id: str, *, settings: Settings | None = None) -> dict | 
         breakdown_raw = json.loads(r[21]) if r[21] else {}
         detail = {
             "trx_id": r[0], "device_id": r[1] or None, "service": r[2] or None,
+            "campaign": r[22] or None,
             "source": r[3] or None, "pub_id": r[4] or None, "decision": r[5],
             "weboptin_status": r[6] or None, "final_score": float(r[7]),
             "signals": json.loads(r[8]) if r[8] else {},

@@ -16,6 +16,7 @@ class SessionInitRequest(BaseModel):
 
     trx_id: str = Field(pattern=TRX_ID_PATTERN)
     service: str = Field(pattern=SLUG_PATTERN)
+    campaign: str = Field(pattern=SLUG_PATTERN)
     source: str | None = Field(default=None, pattern=ATTR_PATTERN)
     pub_id: str | None = Field(default=None, pattern=ATTR_PATTERN)
     source_params: dict[str, str] | None = None
@@ -119,8 +120,10 @@ class ScoreRequest(BaseModel):
 
     trx_id: str = Field(pattern=TRX_ID_PATTERN)
     service: str = Field(pattern=SLUG_PATTERN)
+    campaign: str = Field(pattern=SLUG_PATTERN)
     source: str | None = Field(default=None, pattern=ATTR_PATTERN)
     pub_id: str | None = Field(default=None, pattern=ATTR_PATTERN)
+    source_params: dict[str, str] | None = None  # D2: dikirim ulang agar tersimpan ke OLAP
     session_token: str
     schema_version: str
     client_ts: datetime | None = None

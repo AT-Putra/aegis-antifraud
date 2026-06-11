@@ -31,6 +31,7 @@ class SearchResultItem(BaseModel):
     trx_id: str
     device_id: str | None = None
     service: str | None = None
+    campaign: str | None = None
     source: str | None = None
     pub_id: str | None = None
     decision: str
@@ -43,6 +44,7 @@ class DecisionDetail(BaseModel):
     trx_id: str
     device_id: str | None = None
     service: str | None = None
+    campaign: str | None = None
     source: str | None = None
     pub_id: str | None = None
     decision: str

@@ -28,11 +28,15 @@ def _sign(payload_b64: str, key: str) -> str:
     return hmac.new(key.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
 
 
-def issue(trx_id: str) -> tuple[str, datetime]:
+def issue(trx_id: str, service: str, campaign: str) -> tuple[str, datetime]:
+    """Terbitkan token terikat (trx_id, service, campaign) — D3 (T-21, F-16)."""
     s = get_settings()
     jti = secrets.token_urlsafe(16)
     exp = datetime.now(UTC) + timedelta(seconds=SESSION_TTL_SECONDS)
-    payload = {"trx_id": trx_id, "jti": jti, "exp": int(exp.timestamp())}
+    payload = {
+        "trx_id": trx_id, "service": service, "campaign": campaign,
+        "jti": jti, "exp": int(exp.timestamp()),
+    }
     payload_b64 = base64.urlsafe_b64encode(
         json.dumps(payload, separators=(",", ":")).encode()
     ).decode()
@@ -41,8 +45,11 @@ def issue(trx_id: str) -> tuple[str, datetime]:
     return token, exp
 
 
-def verify_and_consume(token: str, trx_id: str) -> None:
-    """Validasi & langsung pakai token (single-use). Raise SessionTokenError bila gagal."""
+def verify_and_consume(token: str, trx_id: str, service: str, campaign: str) -> None:
+    """Validasi & langsung pakai token (single-use). Raise SessionTokenError bila gagal.
+
+    Cek (trx_id, service, campaign) cocok dengan saat init (D3 — cegah token lintas-campaign).
+    """
     s = get_settings()
     try:
         payload_b64, sig = token.split(".", 1)
@@ -56,6 +63,8 @@ def verify_and_consume(token: str, trx_id: str) -> None:
         raise SessionTokenError("bad payload") from exc
     if payload.get("trx_id") != trx_id:
         raise SessionTokenError("trx mismatch")
+    if payload.get("service") != service or payload.get("campaign") != campaign:
+        raise SessionTokenError("service/campaign mismatch")
     if int(payload.get("exp", 0)) < int(datetime.now(UTC).timestamp()):
         raise SessionTokenError("expired")
     # single-use: delete mengembalikan jumlah yang dihapus; 0 = sudah dipakai/kedaluwarsa

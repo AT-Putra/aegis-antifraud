@@ -14,17 +14,24 @@ _NOW = datetime(2026, 6, 11, 8, 0, tzinfo=UTC)
 
 
 def test_session_init_valid() -> None:
-    m = SessionInitRequest(trx_id="abc123", service="funzone", source="facebook", pub_id="123")
-    assert m.service == "funzone"
+    m = SessionInitRequest(
+        trx_id="abc123", service="funzone", campaign="promo-a", source="facebook", pub_id="123"
+    )
+    assert m.service == "funzone" and m.campaign == "promo-a"
 
 
 def test_session_init_service_slug_invalid() -> None:
     with pytest.raises(ValidationError):
-        SessionInitRequest(trx_id="abc", service="FunZone")  # huruf besar tak valid
+        SessionInitRequest(trx_id="abc", service="FunZone", campaign="promo-a")  # huruf besar
+
+
+def test_session_init_campaign_required() -> None:
+    with pytest.raises(ValidationError):
+        SessionInitRequest(trx_id="abc", service="funzone")  # campaign wajib (F-16)
 
 
 def test_session_init_source_nullable() -> None:
-    m = SessionInitRequest(trx_id="abc", service="funzone")
+    m = SessionInitRequest(trx_id="abc", service="funzone", campaign="promo-a")
     assert m.source is None and m.pub_id is None
 
 
@@ -32,6 +39,7 @@ def test_score_request_valid() -> None:
     m = ScoreRequest(
         trx_id="abc123",
         service="funzone",
+        campaign="promo-a",
         session_token="tok",
         schema_version="1.0",
         signals={"fingerprint": {"canvas_hash": "x"}, "behavior": {}},

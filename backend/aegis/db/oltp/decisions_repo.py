@@ -38,19 +38,21 @@ def insert_decision(
     reason: str | None,
     weboptin_status: str,
     weboptin_host: str | None = None,
+    campaign_id: str | None = None,
 ) -> str:
     with conn.cursor() as cur:
         cur.execute(
             "INSERT INTO decisions "
-            "(trx_id, device_id, service_id, source, pub_id, final_score, decision, "
-            " threshold_used, rules_version, model_version, reason, weboptin_status, "
-            " weboptin_host) "
-            "VALUES (%s, %s, %s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+            "(trx_id, device_id, service_id, campaign_id, source, pub_id, final_score, "
+            " decision, threshold_used, rules_version, model_version, reason, "
+            " weboptin_status, weboptin_host) "
+            "VALUES (%s, %s, %s::uuid, %s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
             "RETURNING id",
             (
                 trx_id,
                 device_id,
                 service_id,
+                campaign_id,
                 source,
                 pub_id,
                 final_score,

@@ -153,3 +153,30 @@ class ServiceUpdate(BaseModel):
     cp_api_url: str | None = Field(default=None, pattern=r"^https://.+")
     hmac_secret: str | None = None
     status: Literal["active", "inactive"] | None = None
+
+
+# --- Campaign registry (pre-landing portabel; F-16) ---
+class CampaignOut(BaseModel):
+    id: UUID
+    slug: str
+    name: str
+    service: str
+    allowed_origins: list[str] = []
+    status: Literal["active", "inactive"]
+    created_at: datetime
+    updated_at: datetime
+
+
+class CampaignCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    slug: str = Field(pattern=SLUG_PATTERN)
+    name: str
+    service: str = Field(pattern=SLUG_PATTERN)
+    allowed_origins: list[str] = []
+
+
+class CampaignUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = None
+    allowed_origins: list[str] | None = None
+    status: Literal["active", "inactive"] | None = None

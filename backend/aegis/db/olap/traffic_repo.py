@@ -35,6 +35,8 @@ def write_event(
     service: str | None,
     source: str | None,
     pub_id: str | None,
+    campaign: str | None = None,
+    source_params: dict | None = None,
     signals: dict,
     features: dict,
     ip_intel: dict,
@@ -63,13 +65,14 @@ def write_event(
             di.get("browser") or "", di.get("os") or "", di.get("device_type") or "",
             di.get("brand") or "", di.get("model") or "", 1 if is_webview else 0,
             json.dumps(score_breakdown or {}, default=str),
+            campaign or "", json.dumps(source_params or {}, default=str),
         ]],
         column_names=[
             "trx_id", "device_id", "service", "source", "pub_id", "signals", "features",
             "ip_country", "ip_asn", "ip_isp", "connection_type", "vpn_proxy_tor",
             "ip_reputation", "decision", "final_score", "weboptin_status",
             "browser", "os", "device_type", "device_brand", "device_model", "is_webview",
-            "score_breakdown",
+            "score_breakdown", "campaign", "source_params",
         ],
         settings=_ASYNC,
     )
@@ -78,11 +81,11 @@ def write_event(
         [[
             trx_id, device_id, service or "", source or "", pub_id or "",
             float(final_score or 0.0), decision, weboptin_status,
-            int(rules_version or 0), int(model_version or 0),
+            int(rules_version or 0), int(model_version or 0), campaign or "",
         ]],
         column_names=[
             "trx_id", "device_id", "service", "source", "pub_id", "final_score",
-            "decision", "weboptin_status", "rules_version", "model_version",
+            "decision", "weboptin_status", "rules_version", "model_version", "campaign",
         ],
         settings=_ASYNC,
     )

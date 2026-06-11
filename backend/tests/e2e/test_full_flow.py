@@ -12,6 +12,7 @@ from aegis.config import get_settings
 from aegis.cp.client import MintResult
 from aegis.db.oltp import decisions_repo, outcomes_repo
 from aegis.db.postgres import connection
+from aegis.registry.campaign import register_campaign
 from aegis.registry.service import register_service
 from aegis.security.hmac_auth import compute_signature
 
@@ -55,8 +56,16 @@ def _service() -> str:
     return slug
 
 
-def _init(client, trx, svc) -> str:
-    r = client.post("/v1/session/init", json={"trx_id": trx, "service": svc})
+def _campaign(svc: str) -> str:
+    slug = f"camp-{uuid.uuid4().hex[:12]}"
+    register_campaign(slug, "Camp", svc, [])
+    return slug
+
+
+def _init(client, trx, svc, camp) -> str:
+    r = client.post(
+        "/v1/session/init", json={"trx_id": trx, "service": svc, "campaign": camp}
+    )
     assert r.status_code == 200, r.text
     return r.json()["session_token"]
 
@@ -76,12 +85,13 @@ def test_allow_then_callback_links_to_decision(client, monkeypatch) -> None:
         lambda *a, **k: MintResult("minted", redirect_url="https://telco/x?token=1", host="telco"),
     )
     svc = _service()
+    camp = _campaign(svc)
     trx = f"trx-{uuid.uuid4().hex[:12]}"
 
     # 1) init → score (human) → allow + redirect
-    tok = _init(client, trx, svc)
+    tok = _init(client, trx, svc, camp)
     r = client.post("/v1/score", json={
-        "trx_id": trx, "service": svc, "session_token": tok,
+        "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "source": "facebook", "pub_id": "123", "signals": _HUMAN,
     })
     assert r.status_code == 200 and r.json()["decision"] == "allow"
@@ -110,10 +120,11 @@ def test_allow_then_callback_links_to_decision(client, monkeypatch) -> None:
 
 def test_block_flow(client) -> None:
     svc = _service()
+    camp = _campaign(svc)
     trx = f"trx-{uuid.uuid4().hex[:12]}"
-    tok = _init(client, trx, svc)
+    tok = _init(client, trx, svc, camp)
     r = client.post("/v1/score", json={
-        "trx_id": trx, "service": svc, "session_token": tok,
+        "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "signals": _BOT,
     })
     assert r.status_code == 200 and r.json()["decision"] == "block"
