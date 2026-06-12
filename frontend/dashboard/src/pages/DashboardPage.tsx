@@ -1,13 +1,24 @@
 import { BarChart, LineChart } from "@mantine/charts";
-import { Alert, Card, Group, Loader, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Badge, Card, Group, Loader, Stack, Table, Text } from "@mantine/core";
+import { IconBroadcast } from "@tabler/icons-react";
 import { useState } from "react";
 
 import type { AnalyticsFilters } from "../api/types";
+import { DecisionBadge } from "../components/DecisionBadge";
 import { FilterBar } from "../components/FilterBar";
 import { KPICards } from "../components/KPICards";
+import { PageHeader } from "../components/PageHeader";
 import { useBreakdown, useSummary, useTimeseries } from "../hooks/queries";
 import { useStream } from "../hooks/useStream";
 import { browserTz, formatTs } from "../lib/tz";
+
+function Empty({ label }: { label: string }) {
+  return (
+    <Text size="sm" c="dimmed" ta="center" py="xl">
+      {label}
+    </Text>
+  );
+}
 
 export function DashboardPage() {
   const [filters, setFilters] = useState<AnalyticsFilters>({ tz: browserTz() });
@@ -16,13 +27,27 @@ export function DashboardPage() {
   const bd = useBreakdown("decision", filters);
   const stream = useStream(true);
 
+  const tsData = (ts.data ?? []).map((p) => ({
+    bucket: formatTs(p.bucket_ts, filters.tz),
+    value: p.value,
+  }));
+  const bdData = (bd.data ?? []).map((b) => ({ key: b.key, count: b.count }));
+
   return (
     <Stack>
-      <Group justify="space-between">
-        <Title order={3}>Analitik</Title>
-        <Text size="sm" c={stream.connected ? "teal" : "dimmed"} data-testid="sse-status">
-          {stream.connected ? "realtime ●" : "realtime ○"}
-        </Text>
+      <Group justify="space-between" align="flex-start">
+        <PageHeader
+          title="Analitik"
+          description="Ringkasan lalu lintas scoring, tren keputusan, dan aktivitas terkini."
+        />
+        <Badge
+          color={stream.connected ? "teal" : "gray"}
+          variant="light"
+          leftSection={<IconBroadcast size={13} />}
+          data-testid="sse-status"
+        >
+          {stream.connected ? "realtime" : "terputus"}
+        </Badge>
       </Group>
 
       <FilterBar value={filters} onChange={setFilters} />
@@ -39,13 +64,17 @@ export function DashboardPage() {
         <Text fw={600} mb="sm">
           Total per hari
         </Text>
-        <LineChart
-          h={220}
-          data={(ts.data ?? []).map((p) => ({ bucket: formatTs(p.bucket_ts, filters.tz), value: p.value }))}
-          dataKey="bucket"
-          series={[{ name: "value", label: "total" }]}
-          curveType="monotone"
-        />
+        {tsData.length === 0 ? (
+          <Empty label="Belum ada data pada rentang ini." />
+        ) : (
+          <LineChart
+            h={220}
+            data={tsData}
+            dataKey="bucket"
+            series={[{ name: "value", label: "total" }]}
+            curveType="monotone"
+          />
+        )}
       </Card>
 
       <Group align="flex-start" grow wrap="wrap">
@@ -53,12 +82,16 @@ export function DashboardPage() {
           <Text fw={600} mb="sm">
             Breakdown keputusan
           </Text>
-          <BarChart
-            h={220}
-            data={(bd.data ?? []).map((b) => ({ key: b.key, count: b.count }))}
-            dataKey="key"
-            series={[{ name: "count", label: "jumlah" }]}
-          />
+          {bdData.length === 0 ? (
+            <Empty label="Belum ada keputusan." />
+          ) : (
+            <BarChart
+              h={220}
+              data={bdData}
+              dataKey="key"
+              series={[{ name: "count", label: "jumlah" }]}
+            />
+          )}
         </Card>
 
         <Card withBorder padding="md" radius="md">
@@ -76,13 +109,22 @@ export function DashboardPage() {
             <Table.Tbody>
               {stream.feed.map((r, i) => (
                 <Table.Tr key={`${r.trx_id}-${i}`}>
-                  <Table.Td>{String(r.trx_id ?? "")}</Table.Td>
-                  <Table.Td>{String(r.decision ?? "")}</Table.Td>
+                  <Table.Td>
+                    <Text size="sm" ff="monospace">
+                      {String(r.trx_id ?? "")}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <DecisionBadge decision={r.decision != null ? String(r.decision) : null} />
+                  </Table.Td>
                   <Table.Td>{String(r.campaign ?? "")}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
+          {stream.feed.length === 0 ? (
+            <Empty label="Menunggu keputusan masuk…" />
+          ) : null}
         </Card>
       </Group>
     </Stack>

@@ -1,4 +1,5 @@
-import { Button, Card, Center, PasswordInput, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Button, Card, Center, Group, PasswordInput, Stack, Text, TextInput, Title } from "@mantine/core";
+import { IconShieldCheck } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -29,9 +30,13 @@ export function LoginPage() {
   return (
     <Center h="100vh" p="md">
       <Card withBorder padding="xl" radius="md" w={360}>
-        <Title order={3} mb="md">
-          Masuk Aegis
-        </Title>
+        <Group gap="xs" mb={4}>
+          <IconShieldCheck size={26} color="var(--mantine-color-indigo-6)" />
+          <Title order={3}>Masuk Aegis</Title>
+        </Group>
+        <Text size="sm" c="dimmed" mb="md">
+          Dashboard anti-fraud — masuk untuk melanjutkan.
+        </Text>
         <form onSubmit={submit}>
           <Stack>
             <TextInput label="Username" {...form.getInputProps("username")} />

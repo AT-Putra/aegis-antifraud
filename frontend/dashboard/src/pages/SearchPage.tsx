@@ -1,7 +1,10 @@
-import { Anchor, Button, Group, Loader, Stack, Table, TextInput, Title } from "@mantine/core";
+import { Anchor, Button, Group, Loader, Stack, Table, Text, TextInput } from "@mantine/core";
+import { IconSearch } from "@tabler/icons-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { DecisionBadge } from "../components/DecisionBadge";
+import { PageHeader } from "../components/PageHeader";
 import { useSearch } from "../hooks/queries";
 import { formatTs } from "../lib/tz";
 
@@ -26,16 +29,25 @@ export function SearchPage() {
 
   return (
     <Stack>
-      <Title order={3}>Pencarian</Title>
-      <Group gap="xs" wrap="wrap">
+      <PageHeader
+        title="Pencarian"
+        description="Telusuri keputusan berdasarkan trx, perangkat, layanan, campaign, atau atribut lain. Klik trx untuk detail."
+      />
+      <Group gap="xs" wrap="wrap" align="flex-end">
         {FIELDS.map((f) => (
           <TextInput key={f} aria-label={f} placeholder={f} value={draft[f] ?? ""} onChange={set(f)} />
         ))}
-        <Button onClick={run}>Cari</Button>
+        <Button onClick={run} leftSection={<IconSearch size={16} />}>
+          Cari
+        </Button>
       </Group>
 
       {q.isFetching ? (
         <Loader />
+      ) : active !== null && q.data && q.data.length === 0 ? (
+        <Text size="sm" c="dimmed" ta="center" py="xl">
+          Tidak ada hasil untuk filter ini.
+        </Text>
       ) : q.data ? (
         <Table striped highlightOnHover data-testid="results">
           <Table.Thead>
@@ -55,7 +67,9 @@ export function SearchPage() {
                     {r.trx_id}
                   </Anchor>
                 </Table.Td>
-                <Table.Td>{r.decision}</Table.Td>
+                <Table.Td>
+                  <DecisionBadge decision={r.decision} />
+                </Table.Td>
                 <Table.Td>{r.service}</Table.Td>
                 <Table.Td>{r.campaign}</Table.Td>
                 <Table.Td>{formatTs(r.ts)}</Table.Td>

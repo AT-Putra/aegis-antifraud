@@ -1,6 +1,20 @@
-// Kerangka aplikasi: AppShell responsif + nav role-gated + logout.
-import { AppShell, Burger, Group, NavLink, ScrollArea, Text, Button } from "@mantine/core";
+// Kerangka aplikasi: AppShell responsif + nav berikon & berkelompok + logout.
+import { AppShell, Badge, Burger, Group, NavLink, ScrollArea, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
+import {
+  IconChartBar,
+  IconSearch,
+  IconAdjustments,
+  IconServer,
+  IconSpeakerphone,
+  IconMessageDots,
+  IconBox,
+  IconUsers,
+  IconSettings,
+  IconLogout,
+  IconShieldCheck,
+  type Icon,
+} from "@tabler/icons-react";
 import { NavLink as RouterLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
@@ -8,18 +22,37 @@ import { useAuth } from "../auth/AuthContext";
 interface Item {
   label: string;
   to: string;
+  icon: Icon;
   admin?: boolean;
 }
-const ITEMS: Item[] = [
-  { label: "Analitik", to: "/" },
-  { label: "Pencarian", to: "/search" },
-  { label: "Config", to: "/config", admin: true },
-  { label: "Layanan", to: "/services", admin: true },
-  { label: "Campaign", to: "/campaigns", admin: true },
-  { label: "Feedback", to: "/feedback", admin: true },
-  { label: "Models", to: "/models", admin: true },
-  { label: "Users", to: "/users", admin: true },
-  { label: "Pengaturan", to: "/settings" },
+interface Section {
+  title: string;
+  items: Item[];
+}
+
+const SECTIONS: Section[] = [
+  {
+    title: "Pemantauan",
+    items: [
+      { label: "Analitik", to: "/", icon: IconChartBar },
+      { label: "Pencarian", to: "/search", icon: IconSearch },
+    ],
+  },
+  {
+    title: "Administrasi",
+    items: [
+      { label: "Config", to: "/config", icon: IconAdjustments, admin: true },
+      { label: "Layanan", to: "/services", icon: IconServer, admin: true },
+      { label: "Campaign", to: "/campaigns", icon: IconSpeakerphone, admin: true },
+      { label: "Feedback", to: "/feedback", icon: IconMessageDots, admin: true },
+      { label: "Models", to: "/models", icon: IconBox, admin: true },
+      { label: "Users", to: "/users", icon: IconUsers, admin: true },
+    ],
+  },
+  {
+    title: "Akun",
+    items: [{ label: "Pengaturan", to: "/settings", icon: IconSettings }],
+  },
 ];
 
 export function AppLayout() {
@@ -33,44 +66,66 @@ export function AppLayout() {
     navigate("/login");
   };
 
+  const visible = (s: Section) => s.items.filter((i) => !i.admin || role === "admin");
+
   return (
     <AppShell
       header={{ height: 56 }}
-      navbar={{ width: 220, breakpoint: "sm", collapsed: { mobile: !opened } }}
+      navbar={{ width: 240, breakpoint: "sm", collapsed: { mobile: !opened } }}
       padding="md"
     >
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
-          <Group>
+          <Group gap="xs">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
+            <IconShieldCheck size={22} color="var(--mantine-color-indigo-6)" />
             <Text fw={700}>Aegis</Text>
             <Text c="dimmed" size="sm" visibleFrom="sm">
               Anti-Fraud Dashboard
             </Text>
           </Group>
-          <Group>
-            <Text size="sm" c="dimmed" data-testid="role">
+          <Group gap="sm">
+            <Badge variant="light" color={role === "admin" ? "indigo" : "gray"} data-testid="role">
               {role}
-            </Text>
-            <Button size="xs" variant="light" onClick={onLogout}>
-              Keluar
-            </Button>
+            </Badge>
+            <NavLink
+              label="Keluar"
+              leftSection={<IconLogout size={16} />}
+              onClick={onLogout}
+              w="auto"
+              styles={{ root: { borderRadius: "var(--mantine-radius-md)" } }}
+            />
           </Group>
         </Group>
       </AppShell.Header>
 
       <AppShell.Navbar p="xs">
         <ScrollArea>
-          {ITEMS.filter((i) => !i.admin || role === "admin").map((i) => (
-            <NavLink
-              key={i.to}
-              component={RouterLink}
-              to={i.to}
-              label={i.label}
-              active={loc.pathname === i.to}
-              onClick={() => opened && toggle()}
-            />
-          ))}
+          {SECTIONS.map((s) => {
+            const items = visible(s);
+            if (items.length === 0) return null;
+            return (
+              <div key={s.title}>
+                <Text size="xs" fw={600} c="dimmed" tt="uppercase" px="sm" mt="md" mb={4}>
+                  {s.title}
+                </Text>
+                {items.map((i) => {
+                  const Ico = i.icon;
+                  return (
+                    <NavLink
+                      key={i.to}
+                      component={RouterLink}
+                      to={i.to}
+                      label={i.label}
+                      leftSection={<Ico size={18} stroke={1.8} />}
+                      active={loc.pathname === i.to}
+                      onClick={() => opened && toggle()}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })}
         </ScrollArea>
       </AppShell.Navbar>
 
