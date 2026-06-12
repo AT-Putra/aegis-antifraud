@@ -13,6 +13,13 @@
 		reverse_proxy api:8000
 	}
 
+	# Dashboard SPA (T-16) di /dashboard/* (base=/dashboard/, SPA fallback).
+	handle_path /dashboard/* {
+		root * /srv/dashboard
+		try_files {path} /index.html
+		file_server
+	}
+
 	# Pre-landing statis (T-10) — bundel default self-host. Host eksternal pakai bundel sama.
 	handle {
 		root * /srv/prelanding

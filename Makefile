@@ -2,8 +2,9 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help up down build logs ps test lint fmt migrate train clean prelanding prelanding-test
+.PHONY: help up down build logs ps test lint fmt migrate train clean prelanding prelanding-test dashboard dashboard-test
 NODE := docker run --rm -v "$(CURDIR)/frontend/prelanding":/app -w /app node:24
+NODE_DASH := docker run --rm -v "$(CURDIR)/frontend/dashboard":/app -w /app node:24
 
 help: ## Tampilkan bantuan
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -44,6 +45,12 @@ prelanding: ## Build bundel pre-landing statis → frontend/prelanding/dist (T-1
 
 prelanding-test: ## Test pre-landing (Vitest+jsdom+MSW)
 	$(NODE) sh -c "npm ci && npm test"
+
+dashboard: ## Build bundel dashboard statis → frontend/dashboard/dist (T-16)
+	$(NODE_DASH) sh -c "npm ci && npm run build"
+
+dashboard-test: ## Test dashboard (Vitest+RTL+MSW)
+	$(NODE_DASH) sh -c "npm ci && npm test"
 
 clean: ## Matikan + hapus volume (HATI-HATI: data hilang)
 	$(COMPOSE) down -v
