@@ -23,6 +23,8 @@ from aegis.security.hmac_auth import compute_signature
 from aegis.security.jwt_auth import create_token
 from aegis.security.passwords import hash_password
 
+_ORIGIN = "https://allowed.example"
+
 _HUMAN = {
     "fingerprint": {"canvas_hash": "c1", "webgl": {"renderer": "Mali"},
                     "browser_environment": {"is_webview": False}},
@@ -136,11 +138,22 @@ def test_campaign_cors(client, auth) -> None:
     slug, _ = _create_campaign(client, auth, svc, ["https://allowed.example"])
     body = {"trx_id": f"t-{uuid.uuid4().hex[:8]}", "service": svc, "campaign": slug}
 
-    ok = client.post("/v1/session/init", json=body, headers={"Origin": "https://allowed.example"})
+    ok = client.post("/v1/session/init", json=body, headers={"Origin": _ORIGIN})
     assert ok.status_code == 200, ok.text
+
+    missing = client.post("/v1/session/init", json=body)
+    assert missing.status_code == 403 and missing.json()["code"] == "forbidden_origin"
 
     bad = client.post("/v1/session/init", json=body, headers={"Origin": "https://evil.example"})
     assert bad.status_code == 403 and bad.json()["code"] == "forbidden_origin"
+
+    tok = ok.json()["session_token"]
+    score_body = {
+        "trx_id": body["trx_id"], "service": svc, "campaign": slug, "session_token": tok,
+        "schema_version": "1.0", "source": "fb", "pub_id": "1", "signals": _HUMAN,
+    }
+    score_missing = client.post("/v1/score", json=score_body)
+    assert score_missing.status_code == 403 and score_missing.json()["code"] == "forbidden_origin"
 
 
 # --- AC-CAMPAIGN-03: atribusi & fraud_est (Opsi B, berjenjang) ---
@@ -159,14 +172,14 @@ def test_campaign_attribution_fraud_est(client, auth, monkeypatch) -> None:
         lambda *a, **k: MintResult("minted", redirect_url="https://t/x?token=1", host="t"),
     )
     svc = _service()
-    slug, _ = _create_campaign(client, auth, svc)
-    other, _ = _create_campaign(client, auth, svc)
+    slug, _ = _create_campaign(client, auth, svc, [_ORIGIN])
+    other, _ = _create_campaign(client, auth, svc, [_ORIGIN])
     trx = f"trx-{uuid.uuid4().hex[:10]}"
 
-    tok = client.post("/v1/session/init", json={
+    tok = client.post("/v1/session/init", headers={"Origin": _ORIGIN}, json={
         "trx_id": trx, "service": svc, "campaign": slug,
     }).json()["session_token"]
-    r = client.post("/v1/score", json={
+    r = client.post("/v1/score", headers={"Origin": _ORIGIN}, json={
         "trx_id": trx, "service": svc, "campaign": slug, "session_token": tok,
         "schema_version": "1.0", "source": "fb", "pub_id": "1", "signals": _HUMAN,
     })

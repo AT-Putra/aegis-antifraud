@@ -38,7 +38,7 @@ def _resolve_campaign(req, request: Request):
     if camp is None or camp.service != req.service:
         return None, err(404, "campaign_not_found", "campaign tidak ditemukan / nonaktif")
     origin = request.headers.get("origin")
-    if origin and origin not in camp.allowed_origins:
+    if not origin or origin not in camp.allowed_origins:
         return None, err(403, "forbidden_origin", "origin tidak diizinkan untuk campaign ini")
     return camp, None
 
@@ -91,12 +91,10 @@ def score_endpoint(req: ScoreRequest, request: Request):
     except SessionTokenError:
         return err(401, "invalid_session", "session token tidak valid")
 
+    camp, error = _resolve_campaign(req, request)
+    if error is not None:
+        return error
     svc = get_active_service(req.service)
-    if svc is None:
-        return err(404, "service_not_found", "layanan tidak ditemukan / nonaktif")
-    camp = get_active_campaign(req.campaign)
-    if camp is None or camp.service != req.service:
-        return err(404, "campaign_not_found", "campaign tidak ditemukan / nonaktif")
 
     # Replay: kembalikan keputusan pertama (tidak scoring ulang) — TRD §6.
     with connection() as conn:
