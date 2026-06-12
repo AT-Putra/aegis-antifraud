@@ -71,6 +71,23 @@ def test_role_enforcement(client, user_hdr) -> None:
     assert client.get("/v1/admin/users", headers=user_hdr).status_code == 403  # role user
 
 
+def test_stale_admin_token_uses_current_db_role_and_active(client) -> None:
+    username = _mk_user("admin")
+    hdr = {"Authorization": f"Bearer {create_token(username, 'admin')}"}
+    assert client.get("/v1/admin/users", headers=hdr).status_code == 200
+
+    with connection() as conn:
+        user = users_repo.get_by_username(conn, username)
+        users_repo.update_user(conn, str(user["id"]), role="user")
+    assert client.get("/v1/admin/users", headers=hdr).status_code == 403
+
+    with connection() as conn:
+        user = users_repo.get_by_username(conn, username)
+        users_repo.update_user(conn, str(user["id"]), role="admin", active=False)
+    assert client.get("/v1/admin/users", headers=hdr).status_code == 401
+    assert client.get("/v1/users/me", headers=hdr).status_code == 401
+
+
 # --- Auth ---
 def test_login(client) -> None:
     username = _mk_user("admin")

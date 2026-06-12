@@ -23,13 +23,12 @@ def err(status: int, code: str, message: str) -> JSONResponse:
 
 
 _REQUIRE_ANY = require_role()
-_REQUIRE_ADMIN = require_role("admin")
 
 
 def _resolve(claims: dict) -> dict:
     with connection() as conn:
         user = users_repo.get_by_username(conn, claims.get("sub", ""))
-    if user is None:
+    if user is None or not user["active"]:
         raise HTTPException(401, "user not found")
     return user
 
@@ -39,6 +38,9 @@ def current_user(claims: dict = Depends(_REQUIRE_ANY)) -> dict:
     return _resolve(claims)
 
 
-def current_admin(claims: dict = Depends(_REQUIRE_ADMIN)) -> dict:
-    """User admin (T-15: semua endpoint /v1/admin)."""
-    return _resolve(claims)
+def current_admin(claims: dict = Depends(_REQUIRE_ANY)) -> dict:
+    """User admin (T-15: semua endpoint /v1/admin). Role efektif dibaca dari DB."""
+    user = _resolve(claims)
+    if user["role"] != "admin":
+        raise HTTPException(403, "forbidden")
+    return user
