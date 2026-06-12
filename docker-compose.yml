@@ -119,7 +119,7 @@ services:
     networks: [aegis]
 
   grafana:
-    image: grafana/grafana:13.0.0
+    image: grafana/grafana:12.3.7
     depends_on:
       - prometheus
     environment:
