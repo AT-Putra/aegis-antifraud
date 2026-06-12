@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, Request
 
 from aegis.api.deps import client_ip, err
+from aegis.core import metrics
 from aegis.cp.client import mint_weboptin_url
 from aegis.db.olap import traffic_repo
 from aegis.db.oltp import decisions_repo
@@ -55,10 +58,14 @@ def session_init(req: SessionInitRequest, request: Request):
 def _finalize_allow(svc, req: ScoreRequest):
     """Mint URL web-opt-in via CP; update weboptin_status OLTP; balikkan MintResult."""
     secret = get_service_secret(svc.slug)
+    _t = time.perf_counter()
     res = mint_weboptin_url(
         svc.cp_api_url, secret,
         trx_id=req.trx_id, service=req.service, source=req.source, pub_id=req.pub_id,
     )
+    metrics.mint_latency.observe(time.perf_counter() - _t)
+    if res.weboptin_status == "failed":
+        metrics.mint_failures.labels(res.reason or "unknown").inc()
     with connection() as conn:
         decisions_repo.update_weboptin(conn, req.trx_id, res.weboptin_status, res.host)
     return res
@@ -113,7 +120,11 @@ def score_endpoint(req: ScoreRequest, request: Request):
     cfg = request.app.state.config
     if cfg is None:
         return err(503, "not_ready", "konfigurasi scoring belum siap")
+    _t = time.perf_counter()
     outcome = score(feature_input, config=cfg, models=request.app.state.models)
+    metrics.score_latency.observe(time.perf_counter() - _t)
+    metrics.decisions.labels(outcome.decision).inc()
+    metrics.final_score.observe(outcome.final_score)
 
     with connection() as conn:
         decisions_repo.insert_decision(

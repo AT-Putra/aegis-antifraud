@@ -10,6 +10,7 @@ import psycopg
 from fastapi import APIRouter, Depends
 
 from aegis.api.deps import current_admin, current_user, err
+from aegis.core.logging import audit
 from aegis.db.oltp import (
     model_versions_repo,
     retrain_jobs_repo,
@@ -79,6 +80,7 @@ def put_config(req: ConfigUpdate, admin: dict = Depends(current_admin)) -> dict:
             blend_weights=req.blend_weights,
             created_by=str(admin["id"]),
         )
+    audit("config_update", actor=admin["username"], version=version)
     return {"version": version}
 
 
@@ -166,6 +168,7 @@ def activate_model(model_id: str, _admin: dict = Depends(current_admin)):
         row = model_versions_repo.activate(conn, model_id)
     if row is None:
         return err(404, "model_not_found", "versi model tidak ditemukan")
+    audit("model_activate", actor=_admin["username"], model_id=model_id, version=row["version"])
     # Catatan: model runtime dimuat di lifespan → efektif setelah restart (hot-reload = future).
     return ModelOut(**row)
 
@@ -205,6 +208,7 @@ def create_user(req: UserCreate, _admin: dict = Depends(current_admin)):
             )
     except psycopg.errors.UniqueViolation:
         return err(409, "username_exists", "username sudah dipakai")
+    audit("user_create", actor=_admin["username"], username=req.username, role=req.role)
     return {"id": uid}
 
 

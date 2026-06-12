@@ -1,0 +1,32 @@
+# Alert dasar level-aplikasi (T-18). Alert memori/disk container butuh node_exporter/
+# cAdvisor (peningkatan masa depan); rilis-1 fokus metrik aplikasi.
+groups:
+  - name: aegis-app
+    rules:
+      - alert: AegisApiDown
+        expr: up{job="aegis-api"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "API Aegis tidak ter-scrape (down)"
+
+      - alert: AegisErrorRateHigh
+        expr: sum(rate(aegis_errors_total[5m])) > 1
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Error rate aplikasi tinggi (>1/dtk selama 5m)"
+
+      - alert: AegisScoringLatencyHigh
+        expr: histogram_quantile(0.99, sum(rate(aegis_score_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "p99 latensi scoring > 1s"
+
+      - alert: AegisMintFailuresHigh
+        expr: sum(rate(aegis_cp_mint_failures_total[5m])) > 0.2
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Kegagalan mint web-opt-in ke CP meningkat"

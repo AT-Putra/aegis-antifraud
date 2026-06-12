@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request
 
 from aegis.api.deps import err
 from aegis.config import get_settings
+from aegis.core import metrics
 from aegis.schemas.callback import ComplaintCallback, SubscriptionCallback
 from aegis.security.hmac_auth import verify_inbound
 from aegis.services import labeling
@@ -31,9 +32,13 @@ async def callback_billing(request: Request):
 
     event = data.get("event")
     if event == "subscription":
-        labeling.record_subscription(SubscriptionCallback.model_validate(data))
+        sub = SubscriptionCallback.model_validate(data)
+        labeling.record_subscription(sub)
+        metrics.callbacks.labels("subscription", sub.charging_status or "na").inc()
     elif event == "complaint":
         labeling.record_complaint(ComplaintCallback.model_validate(data))
+        metrics.callbacks.labels("complaint", "na").inc()
     else:
+        metrics.errors.labels("bad_callback_event").inc()
         return err(422, "bad_event", "event tidak dikenal")
     return {"status": "ok"}
