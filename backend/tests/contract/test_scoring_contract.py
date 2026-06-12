@@ -22,6 +22,8 @@ def _reachable() -> bool:
 
 pytestmark = pytest.mark.skipif(not _reachable(), reason="PostgreSQL tak terjangkau")
 
+_ORIGIN = "https://allowed.example"
+
 _HUMAN = {
     "fingerprint": {"canvas_hash": "c1", "browser_environment": {"is_webview": False}},
     "behavior": {"mouse": {"move_count": 120}, "timing": {"interaction_count": 8}},
@@ -50,13 +52,14 @@ def _svc() -> str:
 
 def _camp(svc: str) -> str:
     slug = f"camp-{uuid.uuid4().hex[:12]}"
-    register_campaign(slug, "C", svc, [])
+    register_campaign(slug, "C", svc, [_ORIGIN])
     return slug
 
 
 def _init(client, trx, svc, camp) -> str:
     r = client.post(
-        "/v1/session/init", json={"trx_id": trx, "service": svc, "campaign": camp}
+        "/v1/session/init", json={"trx_id": trx, "service": svc, "campaign": camp},
+        headers={"Origin": _ORIGIN},
     )
     return r.json()["session_token"]
 
@@ -65,7 +68,8 @@ def test_session_init_shape(client) -> None:
     svc = _svc()
     camp = _camp(svc)
     body = client.post(
-        "/v1/session/init", json={"trx_id": "x1", "service": svc, "campaign": camp}
+        "/v1/session/init", json={"trx_id": "x1", "service": svc, "campaign": camp},
+        headers={"Origin": _ORIGIN},
     ).json()
     assert set(body) == {"session_token", "expires_at"}
 
@@ -86,7 +90,7 @@ def test_allow_shape(client, monkeypatch) -> None:
     camp = _camp(svc)
     trx = f"trx-{uuid.uuid4().hex[:12]}"
     tok = _init(client, trx, svc, camp)
-    body = client.post("/v1/score", json={
+    body = client.post("/v1/score", headers={"Origin": _ORIGIN}, json={
         "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "signals": _HUMAN,
     }).json()
@@ -98,7 +102,7 @@ def test_block_shape_no_score(client) -> None:
     camp = _camp(svc)
     trx = f"trx-{uuid.uuid4().hex[:12]}"
     tok = _init(client, trx, svc, camp)
-    body = client.post("/v1/score", json={
+    body = client.post("/v1/score", headers={"Origin": _ORIGIN}, json={
         "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "signals": _BOT,
     }).json()
@@ -115,7 +119,7 @@ def test_weboptin_unavailable_code(client, monkeypatch) -> None:
     camp = _camp(svc)
     trx = f"trx-{uuid.uuid4().hex[:12]}"
     tok = _init(client, trx, svc, camp)
-    r = client.post("/v1/score", json={
+    r = client.post("/v1/score", headers={"Origin": _ORIGIN}, json={
         "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "signals": _HUMAN,
     })

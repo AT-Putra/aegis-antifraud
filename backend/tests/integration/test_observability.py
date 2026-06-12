@@ -40,11 +40,14 @@ def client():
         yield c
 
 
+_ORIGIN = "https://allowed.example"
+
+
 def _svc_camp() -> tuple[str, str]:
     svc = f"svc-{uuid.uuid4().hex[:10]}"
     register_service(svc, "Obs", "T", "https://cp.example/req", "secret")
     camp = f"camp-{uuid.uuid4().hex[:10]}"
-    register_campaign(camp, "C", svc, [])
+    register_campaign(camp, "C", svc, [_ORIGIN])
     return svc, camp
 
 
@@ -56,9 +59,10 @@ def test_metrics_exposed_after_scoring(client, monkeypatch) -> None:
     svc, camp = _svc_camp()
     trx = f"trx-{uuid.uuid4().hex[:10]}"
     tok = client.post(
-        "/v1/session/init", json={"trx_id": trx, "service": svc, "campaign": camp}
+        "/v1/session/init", json={"trx_id": trx, "service": svc, "campaign": camp},
+        headers={"Origin": _ORIGIN},
     ).json()["session_token"]
-    r = client.post("/v1/score", json={
+    r = client.post("/v1/score", headers={"Origin": _ORIGIN}, json={
         "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "signals": _HUMAN,
     })
@@ -87,9 +91,10 @@ def test_decision_is_versioned_audit(client, monkeypatch) -> None:
     svc, camp = _svc_camp()
     trx = f"trx-{uuid.uuid4().hex[:10]}"
     tok = client.post(
-        "/v1/session/init", json={"trx_id": trx, "service": svc, "campaign": camp}
+        "/v1/session/init", json={"trx_id": trx, "service": svc, "campaign": camp},
+        headers={"Origin": _ORIGIN},
     ).json()["session_token"]
-    client.post("/v1/score", json={
+    client.post("/v1/score", headers={"Origin": _ORIGIN}, json={
         "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "signals": _HUMAN,
     })

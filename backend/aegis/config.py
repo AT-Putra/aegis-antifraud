@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     tz_default: str = "Asia/Jakarta"
     allowed_origins: str = ""
 
+    # Proxy tepercaya (T-20): hanya peer ini yang X-Forwarded-For-nya dipercaya.
+    # Kosong = default jaringan privat/loopback (Caddy di jaringan docker `aegis`).
+    # Daftar CIDR dipisah koma utk override (mis. "10.0.0.0/8,172.16.0.0/12").
+    trusted_proxies: str = ""
+
     # Model store (shared, ADR-003)
     model_dir: str = "/models"
 

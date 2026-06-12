@@ -8,9 +8,13 @@
 		reverse_proxy api:8000
 	}
 
-	# API scoring/callback/admin/analytics (kontrak 03 §/v1)
+	# API scoring/callback/admin/analytics (kontrak 03 §/v1).
+	# Anti-spoof (T-20): timpa X-Forwarded-For dgn peer TCP nyata ({remote_host}),
+	# buang nilai apa pun yang dikirim klien → rate-limit/login-throttle per-IP tak bisa di-bypass.
 	handle /v1/* {
-		reverse_proxy api:8000
+		reverse_proxy api:8000 {
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 
 	# Dashboard SPA (T-16) di /dashboard/* (base=/dashboard/, SPA fallback).

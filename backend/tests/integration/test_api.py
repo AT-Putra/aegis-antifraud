@@ -40,9 +40,12 @@ def _service() -> str:
     return slug
 
 
+_ORIGIN = "https://allowed.example"
+
+
 def _campaign(svc: str) -> str:
     slug = f"camp-{uuid.uuid4().hex[:12]}"
-    register_campaign(slug, "Camp", svc, [])
+    register_campaign(slug, "Camp", svc, [_ORIGIN])
     return slug
 
 
@@ -63,7 +66,8 @@ _BOT = {
 
 def _token(client, trx, service, campaign) -> str:
     r = client.post(
-        "/v1/session/init", json={"trx_id": trx, "service": service, "campaign": campaign}
+        "/v1/session/init", json={"trx_id": trx, "service": service, "campaign": campaign},
+        headers={"Origin": _ORIGIN},
     )
     assert r.status_code == 200, r.text
     return r.json()["session_token"]
@@ -73,7 +77,8 @@ def test_session_init_unknown_service(client) -> None:
     svc = _service()
     camp = _campaign(svc)
     assert client.post(
-        "/v1/session/init", json={"trx_id": "t1", "service": svc, "campaign": camp}
+        "/v1/session/init", json={"trx_id": "t1", "service": svc, "campaign": camp},
+        headers={"Origin": _ORIGIN},
     ).status_code == 200
     r = client.post(
         "/v1/session/init", json={"trx_id": "t2", "service": "nope-xyz", "campaign": camp}
@@ -98,7 +103,7 @@ def test_score_allow_mint(client, monkeypatch) -> None:
     camp = _campaign(svc)
     trx = f"trx-{uuid.uuid4().hex[:12]}"
     tok = _token(client, trx, svc, camp)
-    r = client.post("/v1/score", json={
+    r = client.post("/v1/score", headers={"Origin": _ORIGIN}, json={
         "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "signals": _HUMAN,
     })
@@ -112,7 +117,7 @@ def test_score_block_hard_rule(client) -> None:
     camp = _campaign(svc)
     trx = f"trx-{uuid.uuid4().hex[:12]}"
     tok = _token(client, trx, svc, camp)
-    r = client.post("/v1/score", json={
+    r = client.post("/v1/score", headers={"Origin": _ORIGIN}, json={
         "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "signals": _BOT,
     })
@@ -130,7 +135,7 @@ def test_score_weboptin_unavailable(client, monkeypatch) -> None:
     camp = _campaign(svc)
     trx = f"trx-{uuid.uuid4().hex[:12]}"
     tok = _token(client, trx, svc, camp)
-    r = client.post("/v1/score", json={
+    r = client.post("/v1/score", headers={"Origin": _ORIGIN}, json={
         "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "signals": _HUMAN,
     })

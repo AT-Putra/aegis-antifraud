@@ -56,15 +56,19 @@ def _service() -> str:
     return slug
 
 
+_ORIGIN = "https://allowed.example"
+
+
 def _campaign(svc: str) -> str:
     slug = f"camp-{uuid.uuid4().hex[:12]}"
-    register_campaign(slug, "Camp", svc, [])
+    register_campaign(slug, "Camp", svc, [_ORIGIN])
     return slug
 
 
 def _init(client, trx, svc, camp) -> str:
     r = client.post(
-        "/v1/session/init", json={"trx_id": trx, "service": svc, "campaign": camp}
+        "/v1/session/init", json={"trx_id": trx, "service": svc, "campaign": camp},
+        headers={"Origin": _ORIGIN},
     )
     assert r.status_code == 200, r.text
     return r.json()["session_token"]
@@ -90,7 +94,7 @@ def test_allow_then_callback_links_to_decision(client, monkeypatch) -> None:
 
     # 1) init → score (human) → allow + redirect
     tok = _init(client, trx, svc, camp)
-    r = client.post("/v1/score", json={
+    r = client.post("/v1/score", headers={"Origin": _ORIGIN}, json={
         "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "source": "facebook", "pub_id": "123", "signals": _HUMAN,
     })
@@ -123,7 +127,7 @@ def test_block_flow(client) -> None:
     camp = _campaign(svc)
     trx = f"trx-{uuid.uuid4().hex[:12]}"
     tok = _init(client, trx, svc, camp)
-    r = client.post("/v1/score", json={
+    r = client.post("/v1/score", headers={"Origin": _ORIGIN}, json={
         "trx_id": trx, "service": svc, "campaign": camp, "session_token": tok,
         "schema_version": "1.0", "signals": _BOT,
     })
