@@ -234,3 +234,6 @@ data/geoip/
 # ML artifacts & datasets (TRD §3)
 models/
 data/
+
+# Backup dumps (T-19) — lokal, jangan commit
+backups/

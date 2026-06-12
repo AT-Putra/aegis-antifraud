@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help up down build logs ps test lint fmt migrate train clean prelanding prelanding-test dashboard dashboard-test
+.PHONY: help up down build logs ps test lint fmt migrate train clean prelanding prelanding-test dashboard dashboard-test backup backup-test
 NODE := docker run --rm -v "$(CURDIR)/frontend/prelanding":/app -w /app node:24
 NODE_DASH := docker run --rm -v "$(CURDIR)/frontend/dashboard":/app -w /app node:24
 
@@ -51,6 +51,12 @@ dashboard: ## Build bundel dashboard statis → frontend/dashboard/dist (T-16)
 
 dashboard-test: ## Test dashboard (Vitest+RTL+MSW)
 	$(NODE_DASH) sh -c "npm ci && npm test"
+
+backup: ## Dump DB minimal PG+CH → backups/ (T-19; cron: 0 2 * * * .../scripts/backup.sh)
+	bash scripts/backup.sh
+
+backup-test: ## Uji backup→restore→verify ke DB scratch (T-19, AC-BACKUP-01)
+	bash scripts/tests/test_backup.sh
 
 clean: ## Matikan + hapus volume (HATI-HATI: data hilang)
 	$(COMPOSE) down -v
