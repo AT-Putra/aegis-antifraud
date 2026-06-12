@@ -1,8 +1,11 @@
-import { Button, Group, Modal, Select, Stack, Table, TextInput, Title } from "@mantine/core";
+import { Badge, Button, Modal, Select, Stack, Table, TextInput } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
+import { IconPlus } from "@tabler/icons-react";
 import { useState } from "react";
 
 import type { ServiceOut } from "../api/types";
+import { PageHeader } from "../components/PageHeader";
+import { EmptyState } from "../components/StateViews";
 import { useSaveService, useServices } from "../hooks/admin";
 
 interface Draft {
@@ -41,10 +44,15 @@ export function ServicesPage() {
 
   return (
     <Stack>
-      <Group justify="space-between">
-        <Title order={3}>Layanan</Title>
-        <Button onClick={startCreate}>Tambah</Button>
-      </Group>
+      <PageHeader
+        title="Layanan"
+        description="Service registry: operator, endpoint API CP, dan secret HMAC per-layanan."
+        actions={
+          <Button leftSection={<IconPlus size={16} />} onClick={startCreate}>
+            Tambah
+          </Button>
+        }
+      />
       <Table striped highlightOnHover data-testid="services-table">
         <Table.Thead>
           <Table.Tr>
@@ -61,7 +69,11 @@ export function ServicesPage() {
               <Table.Td>{s.slug}</Table.Td>
               <Table.Td>{s.name}</Table.Td>
               <Table.Td>{s.operator}</Table.Td>
-              <Table.Td>{s.status}</Table.Td>
+              <Table.Td>
+                <Badge color={s.status === "active" ? "teal" : "gray"} variant="light">
+                  {s.status}
+                </Badge>
+              </Table.Td>
               <Table.Td>
                 <Button size="xs" variant="light" onClick={() => startEdit(s)}>
                   Edit
@@ -71,6 +83,9 @@ export function ServicesPage() {
           ))}
         </Table.Tbody>
       </Table>
+      {(list.data ?? []).length === 0 && !list.isLoading && (
+        <EmptyState label="Belum ada layanan" hint="Tambahkan layanan pertama untuk mulai memvalidasi traffic." />
+      )}
 
       <Modal opened={opened} onClose={close} title={editing ? "Edit layanan" : "Tambah layanan"}>
         <Stack>

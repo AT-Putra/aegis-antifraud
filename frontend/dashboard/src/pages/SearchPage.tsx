@@ -1,5 +1,5 @@
-import { Anchor, Button, Group, TextInput } from "@mantine/core";
-import { IconSearch } from "@tabler/icons-react";
+import { Badge, Button, Card, Group, SimpleGrid, Text, TextInput } from "@mantine/core";
+import { IconSearch, IconX } from "@tabler/icons-react";
 import { DataTable, type DataTableSortStatus } from "mantine-datatable";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -14,6 +14,14 @@ const FIELDS = ["trx_id", "device_id", "decision", "service", "campaign", "sourc
 const PAGE_SIZE = 15;
 
 type SortKey = keyof Pick<SearchResultItem, "trx_id" | "decision" | "service" | "campaign" | "final_score" | "ts">;
+
+// Warna badge skor terhadap ambang (semantik proyek: tinggi = lebih berisiko).
+function scoreColor(v: number | null): string {
+  if (v == null) return "gray";
+  if (v >= 0.7) return "red";
+  if (v >= 0.4) return "yellow";
+  return "teal";
+}
 
 export function SearchPage() {
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -38,6 +46,14 @@ export function SearchPage() {
     setPage(1);
   };
 
+  const reset = () => {
+    setDraft({});
+    setActive(null);
+    setPage(1);
+  };
+
+  const activeCount = Object.values(draft).filter(Boolean).length;
+
   // Sort + paginate sisi-klien (hasil search sudah dibatasi server).
   const sorted = useMemo(() => {
     const rows = [...(q.data ?? [])];
@@ -59,14 +75,35 @@ export function SearchPage() {
         title="Pencarian"
         description="Telusuri keputusan berdasarkan trx, perangkat, layanan, campaign, atau atribut lain. Urutkan kolom & klik trx untuk detail."
       />
-      <Group gap="xs" wrap="wrap" align="flex-end" my="md">
-        {FIELDS.map((f) => (
-          <TextInput key={f} aria-label={f} placeholder={f} value={draft[f] ?? ""} onChange={set(f)} />
-        ))}
-        <Button onClick={run} leftSection={<IconSearch size={16} />}>
-          Cari
-        </Button>
-      </Group>
+
+      <Card padding="md" mb="md">
+        <Group justify="space-between" mb="sm">
+          <Group gap="xs">
+            <IconSearch size={18} stroke={1.8} />
+            <Text fw={600} size="sm">
+              Kriteria pencarian
+            </Text>
+            {activeCount > 0 && (
+              <Badge variant="light" size="sm">
+                {activeCount} terisi
+              </Badge>
+            )}
+          </Group>
+        </Group>
+        <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="sm">
+          {FIELDS.map((f) => (
+            <TextInput key={f} label={f} aria-label={f} placeholder={f} value={draft[f] ?? ""} onChange={set(f)} />
+          ))}
+        </SimpleGrid>
+        <Group mt="md">
+          <Button onClick={run} leftSection={<IconSearch size={16} />}>
+            Cari
+          </Button>
+          <Button variant="subtle" color="gray" leftSection={<IconX size={16} />} onClick={reset} disabled={activeCount === 0 && active === null}>
+            Reset
+          </Button>
+        </Group>
+      </Card>
 
       <DataTable<SearchResultItem>
         data-testid="results"
@@ -91,9 +128,15 @@ export function SearchPage() {
             title: "trx_id",
             sortable: true,
             render: (r) => (
-              <Anchor onClick={() => navigate(`/decision/${encodeURIComponent(r.trx_id)}`)}>
+              <Text
+                size="sm"
+                ff="monospace"
+                c="indigo"
+                style={{ cursor: "pointer" }}
+                onClick={() => navigate(`/decision/${encodeURIComponent(r.trx_id)}`)}
+              >
                 {r.trx_id}
-              </Anchor>
+              </Text>
             ),
           },
           {
@@ -106,7 +149,14 @@ export function SearchPage() {
             title: "skor",
             sortable: true,
             textAlign: "right",
-            render: (r) => (r.final_score == null ? "—" : r.final_score.toFixed(3)),
+            render: (r) =>
+              r.final_score == null ? (
+                <Text c="dimmed">—</Text>
+              ) : (
+                <Badge color={scoreColor(r.final_score)} variant="light" radius="sm">
+                  {r.final_score.toFixed(3)}
+                </Badge>
+              ),
           },
           { accessor: "service", sortable: true },
           { accessor: "campaign", sortable: true },

@@ -1,5 +1,15 @@
 // Kerangka aplikasi: AppShell responsif + nav berikon & berkelompok + logout.
-import { AppShell, Badge, Burger, Group, NavLink, ScrollArea, Text } from "@mantine/core";
+import {
+  ActionIcon,
+  AppShell,
+  Badge,
+  Burger,
+  Group,
+  NavLink,
+  ScrollArea,
+  Text,
+  Tooltip,
+} from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
   IconChartBar,
@@ -18,6 +28,7 @@ import {
 import { NavLink as RouterLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface Item {
   label: string;
@@ -85,16 +96,22 @@ export function AppLayout() {
             </Text>
           </Group>
           <Group gap="sm">
+            <ThemeToggle />
             <Badge variant="light" color={role === "admin" ? "indigo" : "gray"} data-testid="role">
               {role}
             </Badge>
-            <NavLink
-              label="Keluar"
-              leftSection={<IconLogout size={16} />}
-              onClick={onLogout}
-              w="auto"
-              styles={{ root: { borderRadius: "var(--mantine-radius-md)" } }}
-            />
+            <Tooltip label="Keluar" withArrow>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="lg"
+                radius="md"
+                aria-label="Keluar"
+                onClick={onLogout}
+              >
+                <IconLogout size={18} stroke={1.8} />
+              </ActionIcon>
+            </Tooltip>
           </Group>
         </Group>
       </AppShell.Header>

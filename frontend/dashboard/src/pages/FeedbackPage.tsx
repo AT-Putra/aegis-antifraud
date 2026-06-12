@@ -1,5 +1,7 @@
-import { Badge, Button, Group, Stack, Table, Text, Title } from "@mantine/core";
+import { Badge, Button, Group, Stack, Table } from "@mantine/core";
 
+import { PageHeader } from "../components/PageHeader";
+import { EmptyState } from "../components/StateViews";
 import { useFeedback, useReviewFeedback } from "../hooks/admin";
 
 export function FeedbackPage() {
@@ -8,10 +10,10 @@ export function FeedbackPage() {
 
   return (
     <Stack>
-      <Title order={3}>Review feedback</Title>
-      <Text c="dimmed" size="sm">
-        Flag yang diterima menjadi label retraining.
-      </Text>
+      <PageHeader
+        title="Review feedback"
+        description="Flag dari user yang diterima menjadi label retraining model."
+      />
       <Table striped data-testid="feedback-table">
         <Table.Thead>
           <Table.Tr>
@@ -43,6 +45,9 @@ export function FeedbackPage() {
           ))}
         </Table.Tbody>
       </Table>
+      {(list.data ?? []).length === 0 && !list.isLoading && (
+        <EmptyState label="Tidak ada feedback menunggu" hint="Semua flag sudah di-review." />
+      )}
     </Stack>
   );
 }

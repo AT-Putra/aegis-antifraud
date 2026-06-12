@@ -1,4 +1,4 @@
-import { Button, Card, Center, Group, PasswordInput, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Button, Card, Center, PasswordInput, Stack, Text, TextInput, ThemeIcon, Title } from "@mantine/core";
 import { IconShieldCheck } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import { useState } from "react";
@@ -29,14 +29,16 @@ export function LoginPage() {
 
   return (
     <Center h="100vh" p="md">
-      <Card withBorder padding="xl" radius="md" w={360}>
-        <Group gap="xs" mb={4}>
-          <IconShieldCheck size={26} color="var(--mantine-color-indigo-6)" />
+      <Card withBorder padding="xl" radius="lg" w={380} shadow="md">
+        <Stack align="center" gap={4} mb="lg">
+          <ThemeIcon variant="light" color="indigo" size={52} radius="md">
+            <IconShieldCheck size={30} stroke={1.7} />
+          </ThemeIcon>
           <Title order={3}>Masuk Aegis</Title>
-        </Group>
-        <Text size="sm" c="dimmed" mb="md">
-          Dashboard anti-fraud — masuk untuk melanjutkan.
-        </Text>
+          <Text size="sm" c="dimmed" ta="center">
+            Dashboard anti-fraud — masuk untuk melanjutkan.
+          </Text>
+        </Stack>
         <form onSubmit={submit}>
           <Stack>
             <TextInput label="Username" {...form.getInputProps("username")} />

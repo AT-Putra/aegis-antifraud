@@ -1,8 +1,10 @@
-import { Button, Group, Modal, PasswordInput, Select, Stack, Switch, Table, TextInput, Title } from "@mantine/core";
+import { Badge, Button, Modal, PasswordInput, Select, Stack, Switch, Table, TextInput } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
+import { IconPlus } from "@tabler/icons-react";
 import { useState } from "react";
 
 import type { Role, UserOut } from "../api/types";
+import { PageHeader } from "../components/PageHeader";
 import { useSaveUser, useUsers } from "../hooks/admin";
 
 interface Draft {
@@ -39,10 +41,15 @@ export function UsersPage() {
 
   return (
     <Stack>
-      <Group justify="space-between">
-        <Title order={3}>Users</Title>
-        <Button onClick={startCreate}>Tambah</Button>
-      </Group>
+      <PageHeader
+        title="Users"
+        description="Kelola akun dashboard & perannya (admin / user)."
+        actions={
+          <Button leftSection={<IconPlus size={16} />} onClick={startCreate}>
+            Tambah
+          </Button>
+        }
+      />
       <Table striped highlightOnHover data-testid="users-table">
         <Table.Thead>
           <Table.Tr>
@@ -56,8 +63,16 @@ export function UsersPage() {
           {(list.data ?? []).map((u) => (
             <Table.Tr key={u.id}>
               <Table.Td>{u.username}</Table.Td>
-              <Table.Td>{u.role}</Table.Td>
-              <Table.Td>{u.active ? "✓" : ""}</Table.Td>
+              <Table.Td>
+                <Badge variant="light" color={u.role === "admin" ? "indigo" : "gray"}>
+                  {u.role}
+                </Badge>
+              </Table.Td>
+              <Table.Td>
+                <Badge variant="light" color={u.active ? "teal" : "gray"}>
+                  {u.active ? "aktif" : "nonaktif"}
+                </Badge>
+              </Table.Td>
               <Table.Td>
                 <Button size="xs" variant="light" onClick={() => startEdit(u)}>
                   Edit

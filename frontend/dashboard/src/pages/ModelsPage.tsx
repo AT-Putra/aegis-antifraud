@@ -1,5 +1,8 @@
-import { Badge, Button, Code, Group, Stack, Table, Text, Title } from "@mantine/core";
+import { Badge, Button, Code, Stack, Table } from "@mantine/core";
+import { IconReload } from "@tabler/icons-react";
 
+import { PageHeader } from "../components/PageHeader";
+import { EmptyState } from "../components/StateViews";
 import { useActivateModel, useModels, useRetrain } from "../hooks/admin";
 import { formatTs } from "../lib/tz";
 
@@ -10,15 +13,15 @@ export function ModelsPage() {
 
   return (
     <Stack>
-      <Group justify="space-between">
-        <Title order={3}>Model & retraining</Title>
-        <Button onClick={() => retrain.mutate()} loading={retrain.isPending}>
-          Trigger retrain
-        </Button>
-      </Group>
-      <Text c="dimmed" size="sm">
-        Aktivasi = approval admin; efektif setelah restart API (hot-reload = masa depan).
-      </Text>
+      <PageHeader
+        title="Model & retraining"
+        description="Aktivasi = approval admin; efektif setelah restart API (hot-reload = masa depan)."
+        actions={
+          <Button leftSection={<IconReload size={16} />} onClick={() => retrain.mutate()} loading={retrain.isPending}>
+            Trigger retrain
+          </Button>
+        }
+      />
       <Table striped data-testid="models-table">
         <Table.Thead>
           <Table.Tr>
@@ -51,6 +54,9 @@ export function ModelsPage() {
           ))}
         </Table.Tbody>
       </Table>
+      {(list.data ?? []).length === 0 && !list.isLoading && (
+        <EmptyState label="Belum ada model" hint="Jalankan retraining untuk menghasilkan versi model pertama." />
+      )}
     </Stack>
   );
 }

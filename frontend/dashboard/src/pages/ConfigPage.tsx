@@ -1,6 +1,7 @@
-import { Alert, Button, Card, Group, JsonInput, NumberInput, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Button, Card, Group, JsonInput, NumberInput, Stack, Table, Text } from "@mantine/core";
 import { useEffect, useState } from "react";
 
+import { PageHeader } from "../components/PageHeader";
 import { fetchConfigVersion, useConfig, useConfigVersions, usePutConfig } from "../hooks/admin";
 import { formatTs } from "../lib/tz";
 
@@ -45,7 +46,10 @@ export function ConfigPage() {
 
   return (
     <Stack>
-      <Title order={3}>Config scoring</Title>
+      <PageHeader
+        title="Config scoring"
+        description="Atur threshold, params rules, dan bobot blend. Setiap simpan membuat versi baru yang aktif; rollback via riwayat."
+      />
       <Card withBorder padding="md" radius="md">
         <Stack>
           <Text c="dimmed" size="sm">

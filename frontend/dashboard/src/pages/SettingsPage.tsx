@@ -1,6 +1,7 @@
 import { Button, Card, Group, Stack, Table, TextInput, Title } from "@mantine/core";
 import { useEffect, useState } from "react";
 
+import { PageHeader } from "../components/PageHeader";
 import { usePutSetting, useSettings, useUpdateMe } from "../hooks/admin";
 import { useMe } from "../hooks/queries";
 
@@ -19,7 +20,10 @@ export function SettingsPage() {
 
   return (
     <Stack>
-      <Title order={3}>Pengaturan</Title>
+      <PageHeader
+        title="Pengaturan"
+        description="Profil timezone Anda dan, untuk admin, pengaturan sistem."
+      />
 
       <Card withBorder padding="md" radius="md">
         <Title order={5} mb="sm">

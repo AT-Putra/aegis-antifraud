@@ -1,8 +1,11 @@
-import { Button, Group, Modal, Select, Stack, Table, Textarea, TextInput, Title } from "@mantine/core";
+import { Badge, Button, Modal, Select, Stack, Table, Textarea, TextInput } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
+import { IconPlus } from "@tabler/icons-react";
 import { useState } from "react";
 
 import type { CampaignOut } from "../api/types";
+import { PageHeader } from "../components/PageHeader";
+import { EmptyState } from "../components/StateViews";
 import { useCampaigns, useSaveCampaign } from "../hooks/admin";
 
 interface Draft {
@@ -43,10 +46,15 @@ export function CampaignsPage() {
 
   return (
     <Stack>
-      <Group justify="space-between">
-        <Title order={3}>Campaign (pre-landing portabel)</Title>
-        <Button onClick={startCreate}>Tambah</Button>
-      </Group>
+      <PageHeader
+        title="Campaign (pre-landing portabel)"
+        description="Tiap campaign = satu pre-landing dengan whitelist origin (CORS) sendiri."
+        actions={
+          <Button leftSection={<IconPlus size={16} />} onClick={startCreate}>
+            Tambah
+          </Button>
+        }
+      />
       <Table striped highlightOnHover data-testid="campaigns-table">
         <Table.Thead>
           <Table.Tr>
@@ -64,8 +72,16 @@ export function CampaignsPage() {
               <Table.Td>{c.slug}</Table.Td>
               <Table.Td>{c.name}</Table.Td>
               <Table.Td>{c.service}</Table.Td>
-              <Table.Td>{(c.allowed_origins ?? []).length}</Table.Td>
-              <Table.Td>{c.status}</Table.Td>
+              <Table.Td>
+                <Badge variant="light" color="gray">
+                  {(c.allowed_origins ?? []).length} origin
+                </Badge>
+              </Table.Td>
+              <Table.Td>
+                <Badge color={c.status === "active" ? "teal" : "gray"} variant="light">
+                  {c.status}
+                </Badge>
+              </Table.Td>
               <Table.Td>
                 <Button size="xs" variant="light" onClick={() => startEdit(c)}>
                   Edit
@@ -75,6 +91,9 @@ export function CampaignsPage() {
           ))}
         </Table.Tbody>
       </Table>
+      {(list.data ?? []).length === 0 && !list.isLoading && (
+        <EmptyState label="Belum ada campaign" hint="Tambahkan campaign untuk menautkan pre-landing portabel ke suatu layanan." />
+      )}
 
       <Modal opened={opened} onClose={close} title={editing ? "Edit campaign" : "Tambah campaign"}>
         <Stack>
