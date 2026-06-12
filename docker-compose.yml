@@ -32,6 +32,8 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+      # jemalloc: kembalikan memori bebas ke OS cepat (cegah RSS merayap → OOM dev). T-18 ops.
+      MALLOC_CONF: "background_thread:true,dirty_decay_ms:5000,muzzy_decay_ms:5000"
     volumes:
       - chdata:/var/lib/clickhouse
       # Mount FILE tunggal (bukan direktori) agar tidak menimpa docker_related_config.xml

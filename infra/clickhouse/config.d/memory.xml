@@ -6,5 +6,7 @@
 -->
 <clickhouse>
     <max_server_memory_usage_to_ram_ratio>0.7</max_server_memory_usage_to_ram_ratio>
-    <mark_cache_size>536870912</mark_cache_size>
+    <!-- Cache dikecilkan agar RSS dev tak menumpuk melewati plafon (OOM code 241). -->
+    <mark_cache_size>268435456</mark_cache_size>
+    <uncompressed_cache_size>0</uncompressed_cache_size>
 </clickhouse>
