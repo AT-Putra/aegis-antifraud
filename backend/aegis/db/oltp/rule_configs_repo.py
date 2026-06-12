@@ -16,6 +16,16 @@ def get_active(conn: psycopg.Connection) -> dict | None:
         return cur.fetchone()
 
 
+def get_by_version(conn: psycopg.Connection, version: int) -> dict | None:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            "SELECT version, params, threshold, blend_weights, defaults_range_meta, active "
+            "FROM rule_configs WHERE version = %s",
+            (version,),
+        )
+        return cur.fetchone()
+
+
 def list_versions(conn: psycopg.Connection) -> list[dict]:
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(

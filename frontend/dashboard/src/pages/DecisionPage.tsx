@@ -1,7 +1,10 @@
 // Detail keputusan (F-11): skor breakdown, signals, ip, device, atribusi, outcome.
-import { Alert, Card, Code, Grid, Group, Loader, Stack, Text, Title } from "@mantine/core";
+// + flag feedback human/robot (F-09).
+import { Alert, Button, Card, Code, Grid, Group, Loader, Stack, Text, TextInput, Title } from "@mantine/core";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 
+import { useSubmitFeedback } from "../hooks/admin";
 import { useDecision } from "../hooks/queries";
 
 function JsonCard({ title, value }: { title: string; value: unknown }) {
@@ -11,6 +14,29 @@ function JsonCard({ title, value }: { title: string; value: unknown }) {
         {title}
       </Text>
       <Code block>{JSON.stringify(value ?? {}, null, 2)}</Code>
+    </Card>
+  );
+}
+
+function FlagCard({ trxId }: { trxId: string }) {
+  const submit = useSubmitFeedback();
+  const [note, setNote] = useState("");
+  const flag = (label: "human" | "robot") =>
+    submit.mutate({ trx_id: trxId, flagged_label: label, note: note || undefined });
+  return (
+    <Card withBorder padding="md" radius="md" data-testid="flag-card">
+      <Text fw={600} mb="xs">
+        Flag keputusan ini (untuk review admin)
+      </Text>
+      <Group align="flex-end">
+        <TextInput label="Catatan (opsional)" value={note} onChange={(e) => setNote(e.currentTarget.value)} style={{ flex: 1 }} />
+        <Button color="teal" variant="light" loading={submit.isPending} onClick={() => flag("human")}>
+          Tandai human
+        </Button>
+        <Button color="red" variant="light" loading={submit.isPending} onClick={() => flag("robot")}>
+          Tandai robot
+        </Button>
+      </Group>
     </Card>
   );
 }
@@ -35,6 +61,7 @@ export function DecisionPage() {
         <Text>Pub: {d.pub_id ?? "-"}</Text>
         <Text>Web-opt-in: {d.weboptin_status ?? "-"}</Text>
       </Group>
+      <FlagCard trxId={d.trx_id} />
       <Grid>
         <Grid.Col span={{ base: 12, md: 6 }}><JsonCard title="Score breakdown" value={d.score_breakdown} /></Grid.Col>
         <Grid.Col span={{ base: 12, md: 6 }}><JsonCard title="IP intelligence" value={d.ip_intelligence} /></Grid.Col>

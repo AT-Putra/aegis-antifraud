@@ -2,10 +2,16 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { AppLayout } from "./components/AppLayout";
+import { CampaignsPage } from "./pages/CampaignsPage";
+import { ConfigPage } from "./pages/ConfigPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DecisionPage } from "./pages/DecisionPage";
+import { FeedbackPage } from "./pages/FeedbackPage";
 import { LoginPage } from "./pages/LoginPage";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { ModelsPage } from "./pages/ModelsPage";
+import { ServicesPage } from "./pages/ServicesPage";
+import { SettingsPage } from "./pages/SettingsPage";
+import { UsersPage } from "./pages/UsersPage";
 import { SearchPage } from "./pages/SearchPage";
 
 export function App() {
@@ -17,13 +23,14 @@ export function App() {
           <Route index element={<DashboardPage />} />
           <Route path="search" element={<SearchPage />} />
           <Route path="decision/:trxId" element={<DecisionPage />} />
-          <Route path="feedback" element={<PlaceholderPage title="Feedback" />} />
-          <Route path="settings" element={<PlaceholderPage title="Pengaturan" />} />
+          <Route path="settings" element={<SettingsPage />} />
           <Route element={<ProtectedRoute requireRole="admin" />}>
-            <Route path="config" element={<PlaceholderPage title="Config" />} />
-            <Route path="services" element={<PlaceholderPage title="Layanan" />} />
-            <Route path="campaigns" element={<PlaceholderPage title="Campaign" />} />
-            <Route path="users" element={<PlaceholderPage title="Users" />} />
+            <Route path="config" element={<ConfigPage />} />
+            <Route path="services" element={<ServicesPage />} />
+            <Route path="campaigns" element={<CampaignsPage />} />
+            <Route path="users" element={<UsersPage />} />
+            <Route path="feedback" element={<FeedbackPage />} />
+            <Route path="models" element={<ModelsPage />} />
           </Route>
         </Route>
       </Route>

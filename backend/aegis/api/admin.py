@@ -89,6 +89,23 @@ def list_config_versions(_admin: dict = Depends(current_admin)) -> list[ConfigVe
     return [ConfigVersionItem(**r) for r in rows]
 
 
+@router.get("/admin/config/{version}")
+def get_config_version(version: int, _admin: dict = Depends(current_admin)):
+    """Ambil params versi tertentu (rollback satu-klik dashboard, 03 §6 / 2026-06-12)."""
+    with connection() as conn:
+        row = rule_configs_repo.get_by_version(conn, version)
+    if row is None:
+        return err(404, "config_version_not_found", "versi config tidak ditemukan")
+    return {
+        "version": row["version"],
+        "params": row["params"] or {},
+        "threshold": float(row["threshold"]),
+        "blend_weights": row["blend_weights"] or {},
+        "guidelines": row.get("defaults_range_meta") or {},
+        "active": row["active"],
+    }
+
+
 # --- Settings ---
 @router.get("/admin/settings", response_model=list[SettingItem])
 def get_settings_list(_admin: dict = Depends(current_admin)) -> list[SettingItem]:

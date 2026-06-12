@@ -105,6 +105,11 @@ def test_config_versioned_and_rollback(client, admin_hdr) -> None:
     by_ver = {r["version"]: r for r in versions}
     assert by_ver[v2]["active"] is True and by_ver[v1]["active"] is False
 
+    # GET /admin/config/{version} → ambil params versi lama (untuk rollback satu-klik)
+    old = client.get(f"/v1/admin/config/{v1}", headers=admin_hdr).json()
+    assert old["params"] == {"a": 1} and old["threshold"] == 0.4 and old["active"] is False
+    assert client.get("/v1/admin/config/999999", headers=admin_hdr).status_code == 404
+
     # rollback = PUT params versi lama → versi baru aktif dengan threshold lama
     v3 = client.put("/v1/admin/config", headers=admin_hdr, json={
         "params": {"a": 1}, "threshold": 0.4, "blend_weights": {"rules": 1.0},

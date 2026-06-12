@@ -16,7 +16,8 @@ const ITEMS: Item[] = [
   { label: "Config", to: "/config", admin: true },
   { label: "Layanan", to: "/services", admin: true },
   { label: "Campaign", to: "/campaigns", admin: true },
-  { label: "Feedback", to: "/feedback" },
+  { label: "Feedback", to: "/feedback", admin: true },
+  { label: "Models", to: "/models", admin: true },
   { label: "Users", to: "/users", admin: true },
   { label: "Pengaturan", to: "/settings" },
 ];

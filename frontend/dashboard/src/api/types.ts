@@ -62,6 +62,73 @@ export interface DecisionDetail {
   outcome: Record<string, unknown> | null;
 }
 
+// --- Admin (03 §6) ---
+export interface ConfigOut {
+  version: number;
+  params: Record<string, unknown>;
+  threshold: number;
+  blend_weights: Record<string, unknown>;
+  guidelines?: Record<string, unknown> | null;
+  active?: boolean;
+}
+export interface ConfigVersionItem {
+  version: number;
+  created_by: string | null;
+  created_at: string;
+  active: boolean;
+}
+export interface SettingItem {
+  key: string;
+  value: string;
+}
+export interface ServiceOut {
+  id: string;
+  slug: string;
+  name: string;
+  operator: string | null;
+  cp_api_url: string;
+  status: "active" | "inactive";
+  created_at: string;
+  updated_at: string;
+}
+export interface CampaignOut {
+  id: string;
+  slug: string;
+  name: string;
+  service: string;
+  allowed_origins: string[];
+  status: "active" | "inactive";
+  created_at: string;
+  updated_at: string;
+}
+export interface UserOut {
+  id: string;
+  username: string;
+  role: Role;
+  active: boolean;
+}
+export interface ModelOut {
+  id: string;
+  version: number;
+  algorithm: string;
+  trained_at: string | null;
+  metrics: Record<string, unknown>;
+  active: boolean;
+}
+export interface RetrainJob {
+  job_id: string;
+  status: string;
+  metrics?: Record<string, unknown> | null;
+}
+export interface FeedbackItem {
+  id: string;
+  trx_id: string | null;
+  decision_id: string | null;
+  flagged_label: string;
+  note: string | null;
+  review_status: string;
+}
+
 export interface AnalyticsFilters {
   from?: string | null;
   to?: string | null;
