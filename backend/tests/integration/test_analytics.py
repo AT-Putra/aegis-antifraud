@@ -170,16 +170,19 @@ def test_stream_emits_event(ch, client, auth) -> None:
     # Sertakan campaign & reason (kolom feed F-08) untuk verifikasi ikut terkirim di SSE.
     # ts jauh ke depan (2099) → baris ini dijamin masuk feed "terbaru" (LIMIT 20) walau
     # test lain menyemai decision_log bertanggal lebih awal (isolasi pada dev DB bersama).
+    sb = '{"rules": 0.5, "isolation_forest": 0.3, "lightgbm": 0.7}'
     ch.insert("decision_log", [[
         trx, "dev-x", svc, "fb", "1", 0.9, "block", "na", 1, 0,
-        datetime(2099, 1, 1, 6, 0, 0), camp, "rule:webdriver",
-    ]], column_names=[*_DLOG_COLS, "campaign", "reason"])
+        datetime(2099, 1, 1, 6, 0, 0), camp, "rule:webdriver", sb,
+    ]], column_names=[*_DLOG_COLS, "campaign", "reason", "score_breakdown"])
     r = client.get("/v1/stream", params={"limit": 1}, headers=auth)
     assert r.status_code == 200
     assert "event: kpi" in r.text
-    # Feed decision membawa campaign (bug sebelumnya: kosong) + reason.
+    # Feed decision membawa campaign (bug sebelumnya: kosong) + reason + score_breakdown.
     assert camp in r.text
     assert "rule:webdriver" in r.text
+    assert "isolation_forest" in r.text
+    assert "lightgbm" in r.text
 
 
 def test_requires_auth(ch, client) -> None:

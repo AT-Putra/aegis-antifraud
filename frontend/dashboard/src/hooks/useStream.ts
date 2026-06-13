@@ -87,6 +87,6 @@ function applyEvent(
     const id = String(row.trx_id ?? Math.random());
     if (seen.has(id)) return;
     seen.add(id);
-    setState((s) => ({ ...s, feed: [row, ...s.feed].slice(0, 30) }));
+    setState((s) => ({ ...s, feed: [row, ...s.feed].slice(0, 50) }));
   }
 }

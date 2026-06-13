@@ -83,12 +83,12 @@ def write_event(
             trx_id, device_id, service or "", source or "", pub_id or "",
             float(final_score or 0.0), decision, weboptin_status,
             int(rules_version or 0), int(model_version or 0), campaign or "",
-            reason or "",
+            reason or "", json.dumps(score_breakdown or {}, default=str),
         ]],
         column_names=[
             "trx_id", "device_id", "service", "source", "pub_id", "final_score",
             "decision", "weboptin_status", "rules_version", "model_version", "campaign",
-            "reason",
+            "reason", "score_breakdown",
         ],
         settings=_ASYNC,
     )

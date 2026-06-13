@@ -503,6 +503,19 @@ def features_by_trx(
     return {r[0]: json.loads(r[1]) for r in rows if r[1]}
 
 
+def _parse_breakdown(raw: str | None) -> dict:
+    """Normalkan score_breakdown JSON → 3 kunci tetap (rules/IF/LGBM), nilai float|None.
+
+    Baris decision_log lama (sebelum migrasi 0006) → kolom kosong → semua null.
+    """
+    b = json.loads(raw) if raw else {}
+    return {
+        "rules": b.get("rules"),
+        "isolation_forest": b.get("isolation_forest"),
+        "lightgbm": b.get("lightgbm"),
+    }
+
+
 def recent_decisions(
     since: datetime | None = None, *, limit=20, settings: Settings | None = None
 ) -> list[dict]:
@@ -515,7 +528,7 @@ def recent_decisions(
         params["since"] = _naive_utc(since)
     rows = _get_client(s).query(
         "SELECT trx_id, device_id, service, source, pub_id, final_score, decision, "
-        "weboptin_status, ts, campaign, reason "
+        "weboptin_status, ts, campaign, reason, score_breakdown "
         f"FROM decision_log {where} ORDER BY ts DESC LIMIT {{lim:UInt32}}",
         parameters=params,
     ).result_rows
@@ -525,6 +538,7 @@ def recent_decisions(
             "source": r[3] or None, "pub_id": r[4] or None, "final_score": float(r[5]),
             "decision": r[6], "weboptin_status": r[7] or None, "ts": r[8],
             "campaign": r[9] or None, "reason": r[10] or None,
+            "score_breakdown": _parse_breakdown(r[11]),
         }
         for r in rows
     ]
