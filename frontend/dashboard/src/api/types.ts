@@ -36,6 +36,18 @@ export interface RegistryOption {
   status: string;
 }
 
+// Statistik analitik tambahan (03 §7).
+export interface BlockReasonItem {
+  reason: string;
+  count: number;
+}
+export interface BehaviorStatItem {
+  metric: string;
+  label: string;
+  avg: number;
+  sample: number;
+}
+
 export interface SearchResultItem {
   trx_id: string;
   device_id: string | null;

@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type {
   AnalyticsFilters,
+  BehaviorStatItem,
+  BlockReasonItem,
   BreakdownItem,
   DecisionDetail,
   Me,
@@ -42,6 +44,18 @@ export const useBreakdown = (dimension: string, filters: AnalyticsFilters) =>
   useQuery({
     queryKey: ["breakdown", dimension, filters],
     queryFn: () => api.get<BreakdownItem[]>("/v1/analytics/breakdown", { dimension, ...f(filters) }),
+  });
+
+export const useBlockReasons = (filters: AnalyticsFilters, limit = 10) =>
+  useQuery({
+    queryKey: ["block-reasons", filters, limit],
+    queryFn: () => api.get<BlockReasonItem[]>("/v1/analytics/block-reasons", { ...f(filters), limit }),
+  });
+
+export const useBehaviorStats = (filters: AnalyticsFilters) =>
+  useQuery({
+    queryKey: ["behavior-stats", filters],
+    queryFn: () => api.get<BehaviorStatItem[]>("/v1/analytics/behavior-stats", f(filters)),
   });
 
 export const useSearch = (params: Record<string, unknown>, enabled: boolean) =>

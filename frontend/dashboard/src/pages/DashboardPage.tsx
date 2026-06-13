@@ -9,6 +9,7 @@ import { FilterBar } from "../components/FilterBar";
 import { KPICards } from "../components/KPICards";
 import { MetricsChart } from "../components/MetricsChart";
 import { PageHeader } from "../components/PageHeader";
+import { BehaviorStatsPanel, BlockReasonsPanel } from "../components/StatsPanels";
 import { EmptyState, ErrorState, LoadingRows } from "../components/StateViews";
 import { useBreakdown, useSummary } from "../hooks/queries";
 import { useStream } from "../hooks/useStream";
@@ -138,6 +139,9 @@ export function DashboardPage() {
           ) : null}
         </Card>
       </Group>
+
+      <BlockReasonsPanel filters={filters} />
+      <BehaviorStatsPanel filters={filters} />
     </Stack>
   );
 }

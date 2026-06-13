@@ -19,6 +19,8 @@ from aegis.db.olap import analytics_repo
 from aegis.registry import campaign as campaign_registry
 from aegis.registry import service as service_registry
 from aegis.schemas.analytics import (
+    BehaviorStatItem,
+    BlockReasonItem,
     BreakdownItem,
     DecisionDetail,
     RegistryOption,
@@ -93,6 +95,41 @@ def get_breakdown(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return [BreakdownItem(**r) for r in rows]
+
+
+@router.get("/analytics/block-reasons", response_model=list[BlockReasonItem])
+def get_block_reasons(
+    from_: datetime | None = _From,
+    to: datetime | None = _To,
+    service: str | None = None,
+    campaign: str | None = None,
+    source: str | None = None,
+    pub_id: str | None = None,
+    limit: int = Query(default=10, ge=1, le=50),
+    _claims: dict = _guard,
+) -> list[BlockReasonItem]:
+    """Top-N alasan keputusan `block` + jumlahnya (scoping berjenjang)."""
+    rows = analytics_repo.block_reasons(
+        from_, to, service=service, campaign=campaign, source=source, pub_id=pub_id, limit=limit
+    )
+    return [BlockReasonItem(**r) for r in rows]
+
+
+@router.get("/analytics/behavior-stats", response_model=list[BehaviorStatItem])
+def get_behavior_stats(
+    from_: datetime | None = _From,
+    to: datetime | None = _To,
+    service: str | None = None,
+    campaign: str | None = None,
+    source: str | None = None,
+    pub_id: str | None = None,
+    _claims: dict = _guard,
+) -> list[BehaviorStatItem]:
+    """Rata-rata tiap metrik behavior interaksi user dgn pre-landing (scoping berjenjang)."""
+    rows = analytics_repo.behavior_stats(
+        from_, to, service=service, campaign=campaign, source=source, pub_id=pub_id
+    )
+    return [BehaviorStatItem(**r) for r in rows]
 
 
 # Registry options untuk dropdown filter (chained service→campaign). Read-only, admin+user.

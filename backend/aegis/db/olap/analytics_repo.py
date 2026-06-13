@@ -166,6 +166,79 @@ def _fraud_est(
         return int(cur.fetchone()[0])
 
 
+def block_reasons(
+    from_ts=None, to_ts=None, *, service=None, campaign=None, source=None, pub_id=None,
+    limit: int = 10, settings: Settings | None = None,
+) -> list[dict]:
+    """Top-N alasan keputusan `block` + jumlahnya (OLTP `decisions`, sumber kebenaran reason).
+
+    Scoping berjenjang via `_decisions_scope`. reason NULL/'' (mis. block via threshold tanpa
+    hard-rule) dikelompokkan sebagai 'threshold'. Urut jumlah desc.
+    """
+    lo, hi = _range(from_ts, to_ts)
+    join, extra, (join_args, extra_args) = _decisions_scope(
+        service=service, campaign=campaign, source=source, pub_id=pub_id
+    )
+    args = [*join_args, lo, hi, *extra_args, int(limit)]
+    sql = (
+        "SELECT COALESCE(NULLIF(d.reason, ''), 'threshold') AS reason, count(*) AS n "
+        "FROM decisions d" + join + " WHERE d.decision = 'block' "
+        "AND d.created_at >= %s AND d.created_at < %s" + extra +
+        " GROUP BY reason ORDER BY n DESC LIMIT %s"
+    )
+    with connection() as conn, conn.cursor() as cur:
+        cur.execute(sql, args)
+        return [{"reason": r[0], "count": int(r[1])} for r in cur.fetchall()]
+
+
+# Metrik behavior (flattened, skew-free) di OLAP `traffic_events.features` (JSON dict).
+# Hanya item interaksi user dgn pre-landing yang relevan & numerik.
+_BEHAVIOR_METRICS: dict[str, str] = {
+    "mouse_velocity_mean": "Rata-rata kecepatan mouse",
+    "mouse_direction_changes": "Perubahan arah mouse",
+    "scroll_depth_pct": "Kedalaman scroll (%)",
+    "tap_count": "Jumlah tap",
+    "interaction_count": "Jumlah interaksi",
+    "time_to_cta_ms": "Waktu ke CTA (ms)",
+}
+
+
+def behavior_stats(
+    from_ts=None, to_ts=None, *, service=None, campaign=None, source=None, pub_id=None,
+    settings: Settings | None = None,
+) -> list[dict]:
+    """Rata-rata tiap metrik behavior yang tercatat (OLAP features). Hanya baris yg punya
+    behavior (`has_mouse`/`interaction_count`>0 → diwakili `features != ''`). Scoping berjenjang."""
+    s = settings or get_settings()
+    lo, hi = _range(from_ts, to_ts)
+    params: dict = {"lo": lo, "hi": hi}
+    where = ["ts >= {lo:DateTime}", "ts < {hi:DateTime}", "features != ''", *_scope(
+        params, service=service, campaign=campaign, source=source, pub_id=pub_id
+    )]
+    # avg(JSONExtractFloat(features, key)) + count baris (sampel) per metrik.
+    selects = ", ".join(
+        f"avg(JSONExtractFloat(features, '{k}')) AS avg_{i}" for i, k in enumerate(_BEHAVIOR_METRICS)
+    )
+    row = _get_client(s).query(
+        f"SELECT count() AS sample, {selects} FROM traffic_events WHERE {' AND '.join(where)}",
+        parameters=params,
+    ).result_rows
+    if not row:
+        return []
+    r = row[0]
+    sample = int(r[0])
+    out: list[dict] = []
+    for i, (key, label) in enumerate(_BEHAVIOR_METRICS.items()):
+        val = r[i + 1]
+        out.append({
+            "metric": key,
+            "label": label,
+            "avg": round(float(val), 3) if val is not None else 0.0,
+            "sample": sample,
+        })
+    return out
+
+
 def summary(
     from_ts=None, to_ts=None, *, service=None, campaign=None, source=None, pub_id=None,
     settings: Settings | None = None,

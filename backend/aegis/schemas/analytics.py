@@ -27,6 +27,18 @@ class BreakdownItem(BaseModel):
     count: int
 
 
+class BlockReasonItem(BaseModel):
+    reason: str
+    count: int
+
+
+class BehaviorStatItem(BaseModel):
+    metric: str
+    label: str
+    avg: float
+    sample: int
+
+
 class RegistryOption(BaseModel):
     """Opsi ringkas service/campaign untuk dropdown filter (read-only, admin+user).
 
