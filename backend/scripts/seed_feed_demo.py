@@ -1,9 +1,12 @@
 """Seed demo: 100 keputusan realistis lewat scoring engine ASLI → OLAP (feed/analytics).
 
 Bukan insert karangan: tiap baris membangun Signals → FeatureInput, menjalankan
-`score()` dengan config & models aktif (sama seperti /v1/score), lalu menulis via
-`traffic_repo.write_event` (jalur data identik endpoint: traffic_events + decision_log).
-final_score & score_breakdown yang muncul di feed = hasil engine sungguhan.
+`score()` dengan config & models aktif (sama seperti /v1/score), lalu menulis ke KEDUA
+jalur seperti endpoint: OLTP `decisions` (via decisions_repo) + OLAP traffic_events &
+decision_log (via traffic_repo.write_event). Device didaftarkan via lookup_or_register
+(FK-safe). final_score, score_breakdown, & reason yang muncul di feed DAN halaman detail
+= hasil engine sungguhan. (Sebelumnya hanya OLAP → halaman detail kehilangan reason/
+threshold/callbacks karena bersumber OLTP `decisions`.)
 
 Jalankan di dalam container API:
     docker exec aegis-antifraud-api-1 sh -c 'cd /app && python scripts/seed_feed_demo.py 100'
@@ -16,9 +19,11 @@ import sys
 import uuid
 
 from aegis.db.olap import traffic_repo
+from aegis.db.oltp import decisions_repo
 from aegis.db.postgres import connection
 from aegis.features.device_info import parse_device_info
 from aegis.features.schema import FeatureInput
+from aegis.fingerprint.service import lookup_or_register
 from aegis.ml.loader import load_active_models
 from aegis.schemas.scoring import Signals
 from aegis.scoring.config import load_active_config
@@ -208,14 +213,17 @@ def _scenarios() -> list[tuple[str, float, object]]:
     ]
 
 
-def _active_pairs() -> list[tuple[str, str]]:
-    """Pasangan (service_slug, campaign_slug) aktif dari OLTP untuk dimensi realistis."""
+def _active_pairs() -> list[tuple[str, str, str, str]]:
+    """Tuple (service_slug, campaign_slug, service_id, campaign_id) aktif dari OLTP.
+
+    id (uuid) dibutuhkan untuk FK decisions.service_id/campaign_id (jalur OLTP endpoint).
+    """
     with connection() as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT s.slug, c.slug FROM campaigns c JOIN services s ON s.id = c.service_id "
-            "WHERE c.status = 'active' AND s.status = 'active' LIMIT 40"
+            "SELECT s.slug, c.slug, s.id, c.id FROM campaigns c JOIN services s "
+            "ON s.id = c.service_id WHERE c.status = 'active' AND s.status = 'active' LIMIT 40"
         )
-        return [(r[0], r[1]) for r in cur.fetchall()]
+        return [(r[0], r[1], str(r[2]), str(r[3])) for r in cur.fetchall()]
 
 
 def main(n: int) -> int:
@@ -227,16 +235,18 @@ def main(n: int) -> int:
     if model_version is not None:
         cfg.model_version = model_version
 
-    pairs = _active_pairs() or [("svc-demo", "camp-demo")]
+    pairs = _active_pairs()
+    if not pairs:
+        print("ERROR: tak ada service+campaign aktif (FK decisions butuh id nyata)", file=sys.stderr)
+        return 1
     scen = _scenarios()
-    names = [s[0] for s in scen]
     weights = [s[1] for s in scen]
     sources = ["fb", "tiktok", "google", "organic", "ig"]
 
     tally: dict[str, int] = {"allow": 0, "block": 0}
     by_scen: dict[str, int] = {}
-    for i in range(n):
-        name, _, builder = RNG.choices(scen, weights=weights, k=1)[0]
+    for _ in range(n):
+        name, _w, builder = RNG.choices(scen, weights=weights, k=1)[0]
         sig_dict, ip_kind, dev_class = builder()
         signals = Signals(**sig_dict)
         ip_intel = _ip(ip_kind)
@@ -244,22 +254,39 @@ def main(n: int) -> int:
         be = signals.fingerprint.browser_environment
         is_webview = bool(be and be.is_webview)
 
+        # Device: jalur sama endpoint (upsert tabel devices) → device_id nyata (FK-safe).
+        device = lookup_or_register(signals.fingerprint)
         feature_input = FeatureInput(
             signals=signals, ip_intel=ip_intel, device_info=device_info,
-            device_history={"event_count": RNG.randint(0, 50), "is_new": RNG.random() < 0.4},
+            device_history={"event_count": device.event_count, "is_new": device.is_new},
         )
         outcome = score(feature_input, config=cfg, models=models)
 
-        svc, camp = RNG.choice(pairs)
+        svc, camp, svc_id, camp_id = RNG.choice(pairs)
+        source = RNG.choice(sources)
+        pub_id = str(RNG.randint(1, 9))
         trx = f"demo-{uuid.uuid4().hex[:16]}"
+        weboptin_status = "na" if outcome.decision == "block" else "minted"
+
+        # OLTP decisions (sumber reason/threshold/versi/callbacks di halaman detail) — setia
+        # dengan /v1/score yang menulis di sini SEBELUM OLAP.
+        with connection() as conn:
+            decisions_repo.insert_decision(
+                conn, trx_id=trx, device_id=device.device_id, service_id=svc_id,
+                campaign_id=camp_id, source=source, pub_id=pub_id,
+                final_score=outcome.final_score, decision=outcome.decision,
+                threshold_used=outcome.threshold_used, rules_version=outcome.rules_version,
+                model_version=outcome.model_version, reason=outcome.reason,
+                weboptin_status=weboptin_status,
+            )
+
         traffic_repo.write_event(
-            trx_id=trx, device_id=f"dev-{uuid.uuid4().hex[:12]}",
-            service=svc, campaign=camp,
-            source=RNG.choice(sources), pub_id=str(RNG.randint(1, 9)),
+            trx_id=trx, device_id=device.device_id,
+            service=svc, campaign=camp, source=source, pub_id=pub_id,
             signals=signals.model_dump(),
             features={},  # fitur turunan tak diperlukan untuk feed; engine sudah skor
             ip_intel=ip_intel, decision=outcome.decision, final_score=outcome.final_score,
-            weboptin_status=("na" if outcome.decision == "block" else "minted"),
+            weboptin_status=weboptin_status,
             rules_version=outcome.rules_version, model_version=outcome.model_version,
             reason=outcome.reason, device_info=device_info, is_webview=is_webview,
             score_breakdown=outcome.score_breakdown,
