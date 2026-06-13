@@ -20,4 +20,13 @@ describe("parseSSE (AC-DASH-02 SSE)", () => {
     const { events } = parseSSE("event: kpi\ndata: {bukan json}\n\n");
     expect(events).toHaveLength(0);
   });
+
+  it("feed decision membawa campaign & reason (kolom feed F-08)", () => {
+    const { events } = parseSSE(
+      'event: decision\ndata: {"trx_id":"t-2","decision":"block","campaign":"promo","reason":"rule:webdriver"}\n\n',
+    );
+    const d = events[0].data as { campaign: string; reason: string };
+    expect(d.campaign).toBe("promo");
+    expect(d.reason).toBe("rule:webdriver");
+  });
 });

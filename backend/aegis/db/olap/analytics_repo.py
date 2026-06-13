@@ -435,7 +435,8 @@ def recent_decisions(
         params["since"] = _naive_utc(since)
     rows = _get_client(s).query(
         "SELECT trx_id, device_id, service, source, pub_id, final_score, decision, "
-        f"weboptin_status, ts FROM decision_log {where} ORDER BY ts DESC LIMIT {{lim:UInt32}}",
+        "weboptin_status, ts, campaign, reason "
+        f"FROM decision_log {where} ORDER BY ts DESC LIMIT {{lim:UInt32}}",
         parameters=params,
     ).result_rows
     return [
@@ -443,6 +444,7 @@ def recent_decisions(
             "trx_id": r[0], "device_id": r[1] or None, "service": r[2] or None,
             "source": r[3] or None, "pub_id": r[4] or None, "final_score": float(r[5]),
             "decision": r[6], "weboptin_status": r[7] or None, "ts": r[8],
+            "campaign": r[9] or None, "reason": r[10] or None,
         }
         for r in rows
     ]

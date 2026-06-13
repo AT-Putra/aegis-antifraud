@@ -165,13 +165,19 @@ def test_decision_detail_404(ch, client, auth) -> None:
 
 def test_stream_emits_event(ch, client, auth) -> None:
     svc = f"ana-st-{uuid.uuid4().hex[:8]}"
+    trx = f"t-{uuid.uuid4().hex[:8]}"
+    camp = f"camp-{uuid.uuid4().hex[:8]}"
+    # Sertakan campaign & reason (kolom feed F-08) untuk verifikasi ikut terkirim di SSE.
     ch.insert("decision_log", [[
-        f"t-{uuid.uuid4().hex[:8]}", "dev-x", svc, "fb", "1", 0.9, "block", "na", 1, 0,
-        datetime(2030, 7, 1, 6, 0, 0),
-    ]], column_names=_DLOG_COLS)
+        trx, "dev-x", svc, "fb", "1", 0.9, "block", "na", 1, 0,
+        datetime(2030, 7, 1, 6, 0, 0), camp, "rule:webdriver",
+    ]], column_names=[*_DLOG_COLS, "campaign", "reason"])
     r = client.get("/v1/stream", params={"limit": 1}, headers=auth)
     assert r.status_code == 200
     assert "event: kpi" in r.text
+    # Feed decision membawa campaign (bug sebelumnya: kosong) + reason.
+    assert camp in r.text
+    assert "rule:webdriver" in r.text
 
 
 def test_requires_auth(ch, client) -> None:

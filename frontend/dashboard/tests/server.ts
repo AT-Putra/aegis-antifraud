@@ -21,7 +21,7 @@ export const handlers = [
   http.get(`${B}/v1/registry/campaigns`, () => HttpResponse.json([])),
   http.get(`${B}/v1/stream`, () =>
     new HttpResponse(
-      'event: kpi\ndata: {"total":1}\n\nevent: decision\ndata: {"trx_id":"sse-1","decision":"block","campaign":"c"}\n\n',
+      'event: kpi\ndata: {"total":1}\n\nevent: decision\ndata: {"trx_id":"sse-1","decision":"block","campaign":"c","reason":"rule:webdriver"}\n\n',
       { headers: { "Content-Type": "text/event-stream" } },
     ),
   ),

@@ -159,6 +159,7 @@ def score_endpoint(req: ScoreRequest, request: Request):
             ip_intel=ip_intel, decision=outcome.decision, final_score=outcome.final_score,
             weboptin_status=weboptin_status,
             rules_version=outcome.rules_version, model_version=outcome.model_version,
+            reason=outcome.reason,
             device_info=device_info, is_webview=is_webview,
             score_breakdown=outcome.score_breakdown, source_params=req.source_params,
         )
