@@ -17,8 +17,6 @@ from fastapi.testclient import TestClient
 
 from aegis.config import get_settings
 from aegis.db.migrate import migrate_olap, migrate_oltp
-from aegis.db.oltp import decisions_repo
-from aegis.db.postgres import connection
 from aegis.security.jwt_auth import create_token
 
 _TRAFFIC_COLS = [
@@ -116,24 +114,40 @@ def test_behavior_stats_average(client, auth) -> None:
         assert k in by and by[k]["label"]
 
 
-def test_block_reasons_top_n(client, auth) -> None:
-    svc_slug = f"br-{uuid.uuid4().hex[:8]}"
-    # daftarkan service agar scoping (opsional) valid; di sini uji unscoped.
-    with connection() as conn:
-        # 2x rule:webdriver, 1x threshold (reason NULL) → urut desc.
-        for reason in ("rule:webdriver", "rule:webdriver", None):
-            decisions_repo.insert_decision(
-                conn, trx_id=f"{svc_slug}-{uuid.uuid4().hex[:8]}", device_id=None,
-                service_id=None, source="fb", pub_id="1", final_score=0.9, decision="block",
-                threshold_used=0.5, rules_version=None, model_version=None, reason=reason,
-                weboptin_status="na",
-            )
-        conn.commit()
+_DLOG_COLS = [
+    "trx_id", "device_id", "service", "source", "pub_id", "final_score", "decision",
+    "weboptin_status", "rules_version", "model_version", "ts", "campaign", "reason",
+]
 
-    rows = client.get("/v1/analytics/block-reasons", params={"limit": 10}, headers=auth).json()
+
+def _dlog_row(*, svc, decision, reason, ts) -> list:
+    return [
+        f"t-{uuid.uuid4().hex[:8]}", "dev-x", svc, "fb", "1", 0.9, decision,
+        "na", 1, 0, ts, "", reason,
+    ]
+
+
+def test_block_reasons_top_n(client, auth) -> None:
+    """Full-OLAP: block_reasons membaca decision_log (bukan OLTP). Scoped per service slug."""
+    ch = _ch()
+    if ch is None:
+        pytest.skip("ClickHouse tak terjangkau")
+    svc = f"br-{uuid.uuid4().hex[:8]}"
+    ts = datetime(2031, 2, 1, 6, 0, 0)
+    # 2x rule:webdriver block, 1x block reason kosong (→ 'threshold'), 1x allow (diabaikan).
+    ch.insert("decision_log", [
+        _dlog_row(svc=svc, decision="block", reason="rule:webdriver", ts=ts),
+        _dlog_row(svc=svc, decision="block", reason="rule:webdriver", ts=ts),
+        _dlog_row(svc=svc, decision="block", reason="", ts=ts),
+        _dlog_row(svc=svc, decision="allow", reason="", ts=ts),
+    ], column_names=_DLOG_COLS)
+
+    q = {"from": "2031-02-01T00:00:00", "to": "2031-02-02T00:00:00", "service": svc, "limit": 10}
+    rows = client.get("/v1/analytics/block-reasons", params=q, headers=auth).json()
     by = {r["reason"]: r["count"] for r in rows}
-    assert by.get("rule:webdriver", 0) >= 2
-    assert by.get("threshold", 0) >= 1  # reason NULL dikelompokkan 'threshold'
+    assert by.get("rule:webdriver") == 2
+    assert by.get("threshold") == 1  # reason kosong dikelompokkan 'threshold'
+    assert "allow" not in [r["reason"] for r in rows]  # hanya block
     # terurut menurun.
     counts = [r["count"] for r in rows]
     assert counts == sorted(counts, reverse=True)

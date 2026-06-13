@@ -170,25 +170,26 @@ def block_reasons(
     from_ts=None, to_ts=None, *, service=None, campaign=None, source=None, pub_id=None,
     limit: int = 10, settings: Settings | None = None,
 ) -> list[dict]:
-    """Top-N alasan keputusan `block` + jumlahnya (OLTP `decisions`, sumber kebenaran reason).
+    """Top-N alasan keputusan `block` + jumlahnya (OLAP `decision_log`, full-OLAP statistik).
 
-    Scoping berjenjang via `_decisions_scope`. reason NULL/'' (mis. block via threshold tanpa
-    hard-rule) dikelompokkan sebagai 'threshold'. Urut jumlah desc.
+    Scoping berjenjang via `_scope` (sama spt summary/breakdown). reason kosong (mis. block
+    via threshold tanpa hard-rule, atau baris sebelum migrasi `0004`) dikelompokkan sebagai
+    'threshold'. Urut jumlah desc. *Trade-off:* `reason` OLAP loss-tolerant (async insert);
+    untuk statistik agregat dapat diterima.
     """
+    s = settings or get_settings()
     lo, hi = _range(from_ts, to_ts)
-    join, extra, (join_args, extra_args) = _decisions_scope(
-        service=service, campaign=campaign, source=source, pub_id=pub_id
-    )
-    args = [*join_args, lo, hi, *extra_args, int(limit)]
-    sql = (
-        "SELECT COALESCE(NULLIF(d.reason, ''), 'threshold') AS reason, count(*) AS n "
-        "FROM decisions d" + join + " WHERE d.decision = 'block' "
-        "AND d.created_at >= %s AND d.created_at < %s" + extra +
-        " GROUP BY reason ORDER BY n DESC LIMIT %s"
-    )
-    with connection() as conn, conn.cursor() as cur:
-        cur.execute(sql, args)
-        return [{"reason": r[0], "count": int(r[1])} for r in cur.fetchall()]
+    params: dict = {"lo": lo, "hi": hi, "lim": int(limit)}
+    where = ["ts >= {lo:DateTime}", "ts < {hi:DateTime}", "decision = 'block'", *_scope(
+        params, service=service, campaign=campaign, source=source, pub_id=pub_id
+    )]
+    rows = _get_client(s).query(
+        "SELECT if(reason = '', 'threshold', reason) AS reason, count() AS n "
+        f"FROM decision_log WHERE {' AND '.join(where)} "
+        "GROUP BY reason ORDER BY n DESC LIMIT {lim:UInt32}",
+        parameters=params,
+    ).result_rows
+    return [{"reason": str(r[0]), "count": int(r[1])} for r in rows]
 
 
 # Metrik behavior (flattened, skew-free) di OLAP `traffic_events.features` (JSON dict).
