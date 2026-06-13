@@ -27,6 +27,18 @@ class BreakdownItem(BaseModel):
     count: int
 
 
+class RegistryOption(BaseModel):
+    """Opsi ringkas service/campaign untuk dropdown filter (read-only, admin+user).
+
+    Hanya field non-sensitif (tanpa cp_api_url/secret/allowed_origins). Sumber dropdown
+    chained service→campaign di dashboard.
+    """
+
+    slug: str
+    name: str
+    status: str
+
+
 class SearchResultItem(BaseModel):
     trx_id: str
     device_id: str | None = None

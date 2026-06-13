@@ -17,6 +17,8 @@ export const handlers = [
   http.get(`${B}/v1/analytics/timeseries`, () => HttpResponse.json([])),
   http.get(`${B}/v1/analytics/breakdown`, () => HttpResponse.json([])),
   http.get(`${B}/v1/analytics/search`, () => HttpResponse.json([])),
+  http.get(`${B}/v1/registry/services`, () => HttpResponse.json([])),
+  http.get(`${B}/v1/registry/campaigns`, () => HttpResponse.json([])),
   http.get(`${B}/v1/stream`, () =>
     new HttpResponse(
       'event: kpi\ndata: {"total":1}\n\nevent: decision\ndata: {"trx_id":"sse-1","decision":"block","campaign":"c"}\n\n',

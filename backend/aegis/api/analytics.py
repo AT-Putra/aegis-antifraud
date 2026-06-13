@@ -16,9 +16,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from aegis.db.olap import analytics_repo
+from aegis.registry import campaign as campaign_registry
+from aegis.registry import service as service_registry
 from aegis.schemas.analytics import (
     BreakdownItem,
     DecisionDetail,
+    RegistryOption,
     SearchResultItem,
     SummaryOut,
     TimeseriesPoint,
@@ -90,6 +93,27 @@ def get_breakdown(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return [BreakdownItem(**r) for r in rows]
+
+
+# Registry options untuk dropdown filter (chained service→campaign). Read-only, admin+user.
+# Hanya field non-sensitif; secret/cp_api_url/allowed_origins TIDAK diekspos (lihat schema).
+@router.get("/registry/services", response_model=list[RegistryOption])
+def list_registry_services(_claims: dict = _guard) -> list[RegistryOption]:
+    return [
+        RegistryOption(slug=s.slug, name=s.name, status=s.status)
+        for s in service_registry.list_services()
+    ]
+
+
+@router.get("/registry/campaigns", response_model=list[RegistryOption])
+def list_registry_campaigns(
+    service: str | None = None, _claims: dict = _guard
+) -> list[RegistryOption]:
+    """Campaign milik `service` (chaining). Tanpa `service` → semua campaign."""
+    return [
+        RegistryOption(slug=c.slug, name=c.name, status=c.status)
+        for c in campaign_registry.list_campaigns(service)
+    ]
 
 
 @router.get("/analytics/search", response_model=list[SearchResultItem])

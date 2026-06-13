@@ -29,6 +29,13 @@ export interface BreakdownItem {
   count: number;
 }
 
+// Opsi dropdown filter service/campaign (registry read-only, 03 §7).
+export interface RegistryOption {
+  slug: string;
+  name: string;
+  status: string;
+}
+
 export interface SearchResultItem {
   trx_id: string;
   device_id: string | null;

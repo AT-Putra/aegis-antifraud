@@ -7,10 +7,12 @@ import { useNavigate } from "react-router-dom";
 import type { SearchResultItem } from "../api/types";
 import { DecisionBadge } from "../components/DecisionBadge";
 import { PageHeader } from "../components/PageHeader";
+import { ServiceCampaignPicker } from "../components/ServiceCampaignPicker";
 import { useSearch } from "../hooks/queries";
 import { formatTs } from "../lib/tz";
 
-const FIELDS = ["trx_id", "device_id", "decision", "service", "campaign", "source", "pub_id", "country", "browser"];
+// service & campaign jadi dropdown chained (entitas terdaftar); sisanya teks bebas.
+const FIELDS = ["trx_id", "device_id", "decision", "source", "pub_id", "country", "browser"];
 const PAGE_SIZE = 15;
 
 type SortKey = keyof Pick<SearchResultItem, "trx_id" | "decision" | "service" | "campaign" | "final_score" | "ts">;
@@ -89,6 +91,16 @@ export function SearchPage() {
               </Badge>
             )}
           </Group>
+        </Group>
+        <Group gap="sm" wrap="wrap" align="flex-end" mb="sm">
+          <ServiceCampaignPicker
+            service={draft.service ?? null}
+            campaign={draft.campaign ?? null}
+            onChange={(sc) =>
+              setDraft((d) => ({ ...d, service: sc.service ?? "", campaign: sc.campaign ?? "" }))
+            }
+            width={200}
+          />
         </Group>
         <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="sm">
           {FIELDS.map((f) => (

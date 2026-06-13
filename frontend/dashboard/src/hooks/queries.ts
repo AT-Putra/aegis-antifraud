@@ -7,6 +7,7 @@ import type {
   BreakdownItem,
   DecisionDetail,
   Me,
+  RegistryOption,
   SearchResultItem,
   Summary,
   TimeseriesPoint,
@@ -55,4 +56,20 @@ export const useDecision = (trxId: string) =>
     queryKey: ["decision", trxId],
     queryFn: () => api.get<DecisionDetail>(`/v1/analytics/decision/${encodeURIComponent(trxId)}`),
     enabled: !!trxId,
+  });
+
+// Opsi dropdown filter (registry read-only). Campaign chained: ikut service terpilih.
+export const useServiceOptions = () =>
+  useQuery({
+    queryKey: ["registry-services"],
+    queryFn: () => api.get<RegistryOption[]>("/v1/registry/services"),
+    staleTime: 5 * 60_000,
+  });
+
+export const useCampaignOptions = (service?: string | null) =>
+  useQuery({
+    queryKey: ["registry-campaigns", service ?? null],
+    queryFn: () => api.get<RegistryOption[]>("/v1/registry/campaigns", { service }),
+    enabled: !!service,
+    staleTime: 5 * 60_000,
   });

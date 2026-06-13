@@ -7,12 +7,11 @@ import { DateTimePicker } from "@mantine/dates";
 import { IconAdjustmentsHorizontal, IconFilterOff } from "@tabler/icons-react";
 
 import type { AnalyticsFilters } from "../api/types";
+import { ServiceCampaignPicker } from "./ServiceCampaignPicker";
 
-// Label memakai nama parameter (lowercase) — presisi & konsisten dgn aria-label/SearchPage,
-// sekaligus menghindari tabrakan getByText dgn item nav "Campaign".
+// service & campaign kini dropdown chained (ServiceCampaignPicker). source & pub_id tetap
+// teks bebas (bukan entitas terdaftar).
 const TEXT_FIELDS: { key: keyof AnalyticsFilters; label: string; placeholder: string }[] = [
-  { key: "service", label: "service", placeholder: "slug layanan" },
-  { key: "campaign", label: "campaign", placeholder: "slug campaign" },
   { key: "source", label: "source", placeholder: "sumber iklan" },
   { key: "pub_id", label: "pub_id", placeholder: "id publisher" },
 ];
@@ -66,6 +65,12 @@ export function FilterBar({
       </Group>
 
       <Group gap="sm" wrap="wrap" align="flex-end">
+        <ServiceCampaignPicker
+          service={value.service}
+          campaign={value.campaign}
+          onChange={(sc) => onChange({ ...value, service: sc.service, campaign: sc.campaign })}
+          width={180}
+        />
         {TEXT_FIELDS.map((f) => (
           <TextInput
             key={f.key}

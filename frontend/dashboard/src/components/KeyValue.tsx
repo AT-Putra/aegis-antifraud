@@ -8,9 +8,15 @@ export interface Row {
   value: ReactNode;
 }
 
-/** Format nilai mentah jadi tampilan ramah; null/kosong → "—". */
+/** Format nilai mentah jadi tampilan ramah; null/kosong → "—".
+ *  Memakai <span> (bukan <p>) agar aman disisipkan di dalam Text/Badge. */
 export function fmt(v: unknown): ReactNode {
-  if (v === null || v === undefined || v === "") return <Text c="dimmed">—</Text>;
+  if (v === null || v === undefined || v === "")
+    return (
+      <Text component="span" c="dimmed">
+        —
+      </Text>
+    );
   if (typeof v === "boolean") return v ? "ya" : "tidak";
   if (typeof v === "number") return v.toString();
   return String(v);
@@ -28,7 +34,9 @@ export function KeyValue({ rows }: { rows: Row[] }) {
               </Text>
             </Table.Td>
             <Table.Td>
-              <Text size="sm">{r.value}</Text>
+              <Text component="span" size="sm">
+                {r.value}
+              </Text>
             </Table.Td>
           </Table.Tr>
         ))}
