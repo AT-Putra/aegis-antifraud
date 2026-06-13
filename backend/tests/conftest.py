@@ -2,13 +2,16 @@
 
 Masalah yang dicegah: test integrasi menulis ke Postgres dev (services, users, campaigns,
 rule_configs, app_settings, model_versions, decisions, outcomes, feedback, devices,
-retrain_jobs). Tanpa cleanup, baris menumpuk tiap `pytest` → menu admin dashboard penuh
-sampah (mis. setting `k-xxxx`, config `{"a":1}`).
+retrain_jobs) DAN ke ClickHouse dev (traffic_events, decision_log, outcome_log,
+feedback_log — mis. `test_stream_emits_event` menyemai baris ber-ts 2099). Tanpa cleanup,
+baris menumpuk tiap `pytest` → menu admin & feed/analitik dashboard penuh sampah.
 
-Strategi: session-scoped autouse fixture men-*snapshot* PK baseline tiap tabel SEBELUM test,
-lalu di akhir sesi MENGHAPUS hanya baris yang BARU (PK di luar snapshot) — naming-agnostic,
-hormati urutan FK (anak→induk). Idempoten & aman bila Postgres tak terjangkau (di-skip).
-Tidak menyentuh baris baseline (admin bootstrap, default_timezone, rule_configs v1).
+Strategi: session-scoped autouse fixture men-*snapshot* PK/key baseline tiap tabel SEBELUM
+test, lalu di akhir sesi MENGHAPUS hanya baris yang BARU (key di luar snapshot) —
+naming-agnostic. Postgres: hormati urutan FK (anak→induk). ClickHouse: hapus per-tabel
+(tak ada FK) via mutation `ALTER TABLE ... DELETE`. Idempoten & aman bila DB tak terjangkau
+(di-skip). Tidak menyentuh baris baseline (admin bootstrap, default_timezone, rule_configs
+v1, serta data OLAP yang sudah ada sebelum sesi test — mis. seed demo dashboard).
 """
 
 from __future__ import annotations
@@ -32,6 +35,14 @@ _TABLES: list[tuple[str, str]] = [
     ("users", "id"),
 ]
 
+# Tabel OLAP (ClickHouse) + kolom kunci untuk delta-delete. Tanpa FK → urutan bebas.
+_CH_TABLES: list[tuple[str, str]] = [
+    ("traffic_events", "trx_id"),
+    ("decision_log", "trx_id"),
+    ("outcome_log", "trx_id"),
+    ("feedback_log", "id"),
+]
+
 
 def _pg_conn():
     try:
@@ -42,10 +53,58 @@ def _pg_conn():
         return None
 
 
+def _ch_client():
+    try:
+        import clickhouse_connect
+
+        s = get_settings()
+        return clickhouse_connect.get_client(
+            host=s.clickhouse_host, port=s.clickhouse_port, username=s.clickhouse_user,
+            password=s.clickhouse_password, database=s.clickhouse_db, connect_timeout=3,
+        )
+    except Exception:
+        return None
+
+
+def _ch_snapshot(client) -> dict[str, set]:
+    """Snapshot key baseline tiap tabel OLAP (baris yang sudah ada sebelum sesi test)."""
+    snap: dict[str, set] = {}
+    if client is None:
+        return snap
+    for table, key in _CH_TABLES:
+        try:
+            rows = client.query(f"SELECT DISTINCT {key} FROM {table}").result_rows  # noqa: S608
+            snap[table] = {r[0] for r in rows}
+        except Exception:
+            pass  # tabel belum ada (migrasi belum jalan) → lewati
+    return snap
+
+
+def _ch_cleanup(client, baseline: dict[str, set]) -> None:
+    """Hapus baris OLAP yang BARU (key di luar baseline) via mutation ALTER ... DELETE."""
+    if client is None:
+        return
+    for table, key in _CH_TABLES:
+        if table not in baseline:
+            continue
+        keep = baseline[table]
+        try:
+            if keep:
+                client.command(
+                    f"ALTER TABLE {table} DELETE WHERE {key} NOT IN %(keep)s",  # noqa: S608
+                    parameters={"keep": list(keep)},
+                )
+            else:
+                client.command(f"TRUNCATE TABLE {table}")  # noqa: S608
+        except Exception:
+            pass  # OLAP loss-tolerant; gagal hapus tak boleh menggagalkan sesi test
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _cleanup_test_rows():
-    """Snapshot PK baseline → jalankan sesi test → hapus baris baru (delta)."""
+    """Snapshot PK/key baseline → jalankan sesi test → hapus baris baru (delta), OLTP + OLAP."""
     conn = _pg_conn()
+    ch = _ch_client()
     if conn is None:  # Postgres tak ada → test integrasi akan skip; tak ada yg perlu dibersihkan.
         yield
         return
@@ -61,9 +120,11 @@ def _cleanup_test_rows():
                     conn.rollback()  # tabel belum ada (migrasi belum jalan) → lewati
     finally:
         conn.close()
+    ch_baseline = _ch_snapshot(ch)
 
     yield  # ---- jalankan seluruh sesi test ----
 
+    _ch_cleanup(ch, ch_baseline)
     conn = _pg_conn()
     if conn is None:
         return
