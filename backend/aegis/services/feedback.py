@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+import time
+
+from aegis.db.olap import outcome_repo
 from aegis.db.oltp import feedback_repo
 from aegis.db.postgres import connection
+
+_log = logging.getLogger("aegis.feedback")
 
 
 def submit_feedback(
@@ -29,7 +35,21 @@ def review_feedback(
     feedback_id: str, review_status: str, reviewed_by: str | None = None
 ) -> dict | None:
     with connection() as conn:
-        return feedback_repo.update_review(conn, feedback_id, review_status, reviewed_by)
+        result = feedback_repo.update_review(conn, feedback_id, review_status, reviewed_by)
+    # Mirror status final ke OLAP (statistik fraud_est). version=time_ns → review terbaru menang.
+    # Best-effort & loss-tolerant (ADR-014).
+    if result:
+        try:
+            outcome_repo.write_feedback(
+                id=str(result["id"]),
+                trx_id=result.get("trx_id"),
+                flagged_label=result["flagged_label"],
+                review_status=result["review_status"],
+                version=time.time_ns(),
+            )
+        except Exception:  # noqa: BLE001 — OLAP loss-tolerant
+            _log.warning("OLAP mirror feedback gagal: id=%s", feedback_id)
+    return result
 
 
 def list_pending() -> list[dict]:

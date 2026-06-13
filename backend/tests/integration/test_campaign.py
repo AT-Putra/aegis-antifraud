@@ -190,6 +190,17 @@ def test_campaign_attribution_fraud_est(client, auth, monkeypatch) -> None:
         "event": "complaint", "trx_id": trx, "event_time": datetime.now(UTC).isoformat(),
     }).status_code == 200
 
+    # fraud_est/complaints kini full-OLAP (ADR-014): traffic_events (skor) & outcome_log
+    # (mirror callback) ditulis async_insert → flush queue agar deterministik di test.
+    import clickhouse_connect
+
+    _s = get_settings()
+    _ch = clickhouse_connect.get_client(
+        host=_s.clickhouse_host, port=_s.clickhouse_port, username=_s.clickhouse_user,
+        password=_s.clickhouse_password, database=_s.clickhouse_db,
+    )
+    _ch.command("SYSTEM FLUSH ASYNC INSERT QUEUE")
+
     win = {
         "from": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
         "to": (datetime.now(UTC) + timedelta(days=1)).isoformat(),

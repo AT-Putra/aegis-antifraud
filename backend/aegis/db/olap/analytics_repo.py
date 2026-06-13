@@ -91,79 +91,80 @@ def _scope(params: dict, *, service=None, campaign=None, source=None, pub_id=Non
     return clauses
 
 
-def _decisions_scope(
-    *, service=None, campaign=None, source=None, pub_id=None
-) -> tuple[str, str, list]:
-    """Scoping berjenjang OLTP via `decisions d`. -> (join_sql, where_extra, args_terurut).
+def _scoped_trx_subquery(params: dict, *, lo, hi, service, campaign, source, pub_id) -> str:
+    """Subquery trx_id ber-scope dari `traffic_events` (sumber atribusi). Mutasi `params`.
 
-    Argumen dikembalikan SESUAI URUTAN KEMUNCULAN di SQL: join (service, campaign) lebih dulu,
-    lalu where_extra (source, pub_id). Pemanggil menyisipkan filter waktu di antara keduanya.
+    Dipakai utk meng-`IN`-kan mirror outcome_log/feedback_log → scoping berjenjang full-OLAP
+    tanpa join ke OLTP (ADR-014).
     """
-    join, extra, join_args, extra_args = "", "", [], []
-    if service:
-        join += " JOIN services sv ON sv.id = d.service_id AND sv.slug = %s"
-        join_args.append(service)
-    if campaign:
-        join += " JOIN campaigns cp ON cp.id = d.campaign_id AND cp.slug = %s"
-        join_args.append(campaign)
-    if source:
-        extra += " AND d.source = %s"
-        extra_args.append(source)
-    if pub_id:
-        extra += " AND d.pub_id = %s"
-        extra_args.append(pub_id)
-    return join, extra, (join_args, extra_args)
+    params["lo"], params["hi"] = lo, hi
+    where = ["ts >= {lo:DateTime}", "ts < {hi:DateTime}", *_scope(
+        params, service=service, campaign=campaign, source=source, pub_id=pub_id
+    )]
+    return f"SELECT trx_id FROM traffic_events WHERE {' AND '.join(where)}"
 
 
 def _charging_kpis(
-    from_ts: datetime, to_ts: datetime, *, service=None, campaign=None, source=None, pub_id=None
+    from_ts: datetime, to_ts: datetime, *, service=None, campaign=None, source=None, pub_id=None,
+    settings: Settings | None = None,
 ) -> tuple[int, dict[str, int]]:
-    """complaints + charging_fail_breakdown dari OLTP outcomes (scoping berjenjang opsional)."""
-    join, extra, (join_args, extra_args) = _decisions_scope(
-        service=service, campaign=campaign, source=source, pub_id=pub_id
-    )
-    if join:  # outcomes butuh tautan ke decisions utk scoping
-        join = " JOIN decisions d ON d.trx_id = o.trx_id" + join
-    # Urutan args: join (service,campaign) → waktu (lo,hi) → extra (source,pub_id).
-    args = [*join_args, from_ts, to_ts, *extra_args]
-    base = "o.received_at >= %s AND o.received_at < %s" + extra
-    with connection() as conn, conn.cursor() as cur:
-        cur.execute(
-            f"SELECT count(*) FROM outcomes o{join} "
-            f"WHERE o.callback_type = 'complaint' AND {base}",
-            args,
-        )
-        complaints = int(cur.fetchone()[0])
-        cur.execute(
-            f"SELECT o.charging_fail_reason, count(*) FROM outcomes o{join} "
-            f"WHERE o.charging_status = 'failed' AND {base} "
-            "GROUP BY o.charging_fail_reason",
-            args,
-        )
-        breakdown = {(r[0] or "unknown"): int(r[1]) for r in cur.fetchall()}
+    """complaints + charging_fail_breakdown dari OLAP `outcome_log` (full-OLAP, scoping berjenjang).
+
+    Scoping: outcome di-`IN`-kan ke trx_id traffic_events ber-scope (window pada ts traffic).
+    """
+    s = settings or get_settings()
+    client = _get_client(s)
+    lo, hi = _range(from_ts, to_ts)
+    scoped = any([service, campaign, source, pub_id])
+    p: dict = {"lo": lo, "hi": hi}
+    # Filter received_at outcome pada window sama; bila scoped, batasi trx ke traffic ber-scope.
+    in_clause = ""
+    if scoped:
+        sub = _scoped_trx_subquery(p, lo=lo, hi=hi, service=service, campaign=campaign,
+                                   source=source, pub_id=pub_id)
+        in_clause = f" AND trx_id IN ({sub})"
+    # count(DISTINCT trx_id): uq OLTP = (callback_type,trx_id) → tahan duplikat pra-merge
+    # ReplacingMergeTree tanpa perlu FINAL.
+    complaints = int(client.query(
+        "SELECT count(DISTINCT trx_id) FROM outcome_log "
+        "WHERE callback_type = 'complaint' AND received_at >= {lo:DateTime} "
+        f"AND received_at < {{hi:DateTime}}{in_clause}",
+        parameters=p,
+    ).result_rows[0][0])
+    rows = client.query(
+        "SELECT if(charging_fail_reason = '', 'unknown', charging_fail_reason) AS r, "
+        "count(DISTINCT trx_id) FROM outcome_log "
+        "WHERE charging_status = 'failed' AND received_at >= {lo:DateTime} "
+        f"AND received_at < {{hi:DateTime}}{in_clause} GROUP BY r",
+        parameters=p,
+    ).result_rows
+    breakdown = {str(r[0]): int(r[1]) for r in rows}
     return complaints, breakdown
 
 
 def _fraud_est(
-    from_ts: datetime, to_ts: datetime, *, service=None, campaign=None, source=None, pub_id=None
+    from_ts: datetime, to_ts: datetime, *, service=None, campaign=None, source=None, pub_id=None,
+    settings: Settings | None = None,
 ) -> int:
     """fraud_est = Opsi B: trx allow + sinyal fraud terkonfirmasi (komplain / daily_limit /
-    accepted-feedback robot). Scoping berjenjang via decisions. 0 saat cold-start."""
-    join, extra, (join_args, extra_args) = _decisions_scope(
-        service=service, campaign=campaign, source=source, pub_id=pub_id
-    )
-    args = [*join_args, from_ts, to_ts, *extra_args]
+    accepted-feedback robot). Full-OLAP: traffic_events + outcome_log + feedback_log. Cold→0."""
+    s = settings or get_settings()
+    client = _get_client(s)
+    lo, hi = _range(from_ts, to_ts)
+    p: dict = {"lo": lo, "hi": hi}
+    where = ["ts >= {lo:DateTime}", "ts < {hi:DateTime}", "decision = 'allow'", *_scope(
+        p, service=service, campaign=campaign, source=source, pub_id=pub_id
+    )]
+    # trx allow ber-scope yang punya sinyal fraud terkonfirmasi di mirror OLAP.
     sql = (
-        "SELECT count(DISTINCT d.trx_id) FROM decisions d" + join + " WHERE d.decision = 'allow' "
-        "AND d.created_at >= %s AND d.created_at < %s" + extra + " AND ("
-        " EXISTS (SELECT 1 FROM outcomes o WHERE o.trx_id = d.trx_id AND "
-        "  (o.callback_type = 'complaint' OR o.charging_fail_reason = 'daily_limit_reached'))"
-        " OR EXISTS (SELECT 1 FROM feedback f WHERE f.trx_id = d.trx_id AND "
-        "  f.review_status = 'accepted' AND f.flagged_label = 'robot'))"
+        "SELECT count(DISTINCT trx_id) FROM traffic_events "
+        f"WHERE {' AND '.join(where)} AND ("
+        " trx_id IN (SELECT trx_id FROM outcome_log WHERE callback_type = 'complaint' "
+        "  OR charging_fail_reason = 'daily_limit_reached')"
+        " OR trx_id IN (SELECT trx_id FROM feedback_log FINAL "
+        "  WHERE review_status = 'accepted' AND flagged_label = 'robot'))"
     )
-    with connection() as conn, conn.cursor() as cur:
-        cur.execute(sql, args)
-        return int(cur.fetchone()[0])
+    return int(client.query(sql, parameters=p).result_rows[0][0])
 
 
 def block_reasons(
@@ -218,7 +219,8 @@ def behavior_stats(
     )]
     # avg(JSONExtractFloat(features, key)) + count baris (sampel) per metrik.
     selects = ", ".join(
-        f"avg(JSONExtractFloat(features, '{k}')) AS avg_{i}" for i, k in enumerate(_BEHAVIOR_METRICS)
+        f"avg(JSONExtractFloat(features, '{k}')) AS avg_{i}"
+        for i, k in enumerate(_BEHAVIOR_METRICS)
     )
     row = _get_client(s).query(
         f"SELECT count() AS sample, {selects} FROM traffic_events WHERE {' AND '.join(where)}",
@@ -321,14 +323,18 @@ def breakdown(
     return [{"key": str(r[0]), "count": int(r[1])} for r in rows]
 
 
-def _charging_trx_ids(charging_status: str, lo: datetime, hi: datetime) -> list[str]:
-    with connection() as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT DISTINCT trx_id FROM outcomes "
-            "WHERE charging_status = %s AND received_at >= %s AND received_at < %s LIMIT 5000",
-            (charging_status, lo, hi),
-        )
-        return [r[0] for r in cur.fetchall()]
+def _charging_trx_ids(
+    charging_status: str, lo: datetime, hi: datetime, *, settings: Settings | None = None
+) -> list[str]:
+    """trx_id dgn charging_status tertentu dari OLAP `outcome_log` (full-OLAP, filter search)."""
+    s = settings or get_settings()
+    rows = _get_client(s).query(
+        "SELECT DISTINCT trx_id FROM outcome_log "
+        "WHERE charging_status = {cs:String} AND received_at >= {lo:DateTime} "
+        "AND received_at < {hi:DateTime} LIMIT 5000",
+        parameters={"cs": charging_status, "lo": lo, "hi": hi},
+    ).result_rows
+    return [r[0] for r in rows]
 
 
 def search(

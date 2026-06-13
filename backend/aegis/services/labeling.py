@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from aegis.db.olap import outcome_repo
 from aegis.db.oltp import decisions_repo, outcomes_repo
 from aegis.db.postgres import connection
 from aegis.schemas.callback import ComplaintCallback, SubscriptionCallback
@@ -39,6 +40,18 @@ def _record(
         )
     if orphan:
         _log.warning("orphan callback: type=%s trx_id=%s", callback_type, trx_id)
+    # Mirror ke OLAP hanya untuk insert genuine (bukan duplikat) → tak ada dobel di OLAP.
+    # Best-effort & loss-tolerant: kegagalan OLAP tak menggagalkan callback (ADR-014).
+    if inserted:
+        try:
+            outcome_repo.write_outcome(
+                trx_id=trx_id,
+                callback_type=callback_type,
+                charging_status=charging_status,
+                charging_fail_reason=charging_fail_reason,
+            )
+        except Exception:  # noqa: BLE001 — OLAP loss-tolerant
+            _log.warning("OLAP mirror outcome gagal: trx_id=%s", trx_id)
     return OutcomeResult(stored=True, duplicate=not inserted, orphan=orphan)
 
 

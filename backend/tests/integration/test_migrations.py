@@ -16,7 +16,7 @@ _OLTP_TABLES = {
     "users", "app_settings", "services", "devices", "decisions",
     "outcomes", "rule_configs", "model_versions", "feedback",
 }
-_OLAP_TABLES = {"traffic_events", "decision_log"}
+_OLAP_TABLES = {"traffic_events", "decision_log", "outcome_log", "feedback_log"}
 _DECISION_COLS = {"service_id", "source", "pub_id", "weboptin_status", "weboptin_host"}
 
 

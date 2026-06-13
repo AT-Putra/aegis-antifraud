@@ -58,5 +58,8 @@ backup: ## Dump DB minimal PG+CH → backups/ (T-19; cron: 0 2 * * * .../scripts
 backup-test: ## Uji backup→restore→verify ke DB scratch (T-19, AC-BACKUP-01)
 	bash scripts/tests/test_backup.sh
 
+backfill-olap: ## Backfill outcomes+feedback OLTP → mirror OLAP sekali (ADR-014; idempoten)
+	$(COMPOSE) run --rm api python -m aegis.jobs.backfill_olap_mirror
+
 clean: ## Matikan + hapus volume (HATI-HATI: data hilang)
 	$(COMPOSE) down -v

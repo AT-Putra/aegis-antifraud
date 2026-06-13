@@ -120,7 +120,7 @@ def test_summary_and_search_shape(ch, client, auth) -> None:
 
     s = client.get("/v1/analytics/summary", params=q, headers=auth).json()
     assert s["total"] == 2 and s["allow"] == 1 and s["block"] == 1
-    # fraud_est = Opsi B (allow + sinyal fraud terkonfirmasi via OLTP); tak ada outcome → 0
+    # fraud_est = Opsi B (allow + sinyal fraud terkonfirmasi via OLAP mirror); tak ada outcome → 0
     assert s["fraud_est"] == 0 and s["complaints"] == 0
     assert set(s) == {"total", "allow", "block", "weboptin_failed", "fraud_est",
                       "complaints", "charging_fail_breakdown"}
@@ -168,9 +168,11 @@ def test_stream_emits_event(ch, client, auth) -> None:
     trx = f"t-{uuid.uuid4().hex[:8]}"
     camp = f"camp-{uuid.uuid4().hex[:8]}"
     # Sertakan campaign & reason (kolom feed F-08) untuk verifikasi ikut terkirim di SSE.
+    # ts jauh ke depan (2099) → baris ini dijamin masuk feed "terbaru" (LIMIT 20) walau
+    # test lain menyemai decision_log bertanggal lebih awal (isolasi pada dev DB bersama).
     ch.insert("decision_log", [[
         trx, "dev-x", svc, "fb", "1", 0.9, "block", "na", 1, 0,
-        datetime(2030, 7, 1, 6, 0, 0), camp, "rule:webdriver",
+        datetime(2099, 1, 1, 6, 0, 0), camp, "rule:webdriver",
     ]], column_names=[*_DLOG_COLS, "campaign", "reason"])
     r = client.get("/v1/stream", params={"limit": 1}, headers=auth)
     assert r.status_code == 200
