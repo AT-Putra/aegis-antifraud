@@ -1,10 +1,13 @@
-import { Badge, Button, Modal, PasswordInput, Select, Stack, Switch, Table, TextInput } from "@mantine/core";
+import { Badge, Button, Group, Modal, PasswordInput, Select, Stack, Switch, TextInput } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconPlus } from "@tabler/icons-react";
+import { DataTable } from "mantine-datatable";
 import { useState } from "react";
 
 import type { Role, UserOut } from "../api/types";
 import { PageHeader } from "../components/PageHeader";
+import { QuickFilter } from "../components/QuickFilter";
+import { useClientTable } from "../lib/clientTable";
 import { useSaveUser, useUsers } from "../hooks/admin";
 
 interface Draft {
@@ -22,6 +25,11 @@ export function UsersPage() {
   const [opened, { open, close }] = useDisclosure(false);
   const [d, setD] = useState<Draft>(EMPTY);
   const editing = !!d.id;
+
+  const t = useClientTable<UserOut>(list.data ?? [], {
+    initialSort: { columnAccessor: "username", direction: "asc" },
+    filterKeys: ["username", "role"],
+  });
 
   const startCreate = () => {
     setD(EMPTY);
@@ -50,38 +58,59 @@ export function UsersPage() {
           </Button>
         }
       />
-      <Table striped highlightOnHover data-testid="users-table">
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>username</Table.Th>
-            <Table.Th>role</Table.Th>
-            <Table.Th>aktif</Table.Th>
-            <Table.Th />
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {(list.data ?? []).map((u) => (
-            <Table.Tr key={u.id}>
-              <Table.Td>{u.username}</Table.Td>
-              <Table.Td>
-                <Badge variant="light" color={u.role === "admin" ? "indigo" : "gray"}>
-                  {u.role}
-                </Badge>
-              </Table.Td>
-              <Table.Td>
-                <Badge variant="light" color={u.active ? "teal" : "gray"}>
-                  {u.active ? "aktif" : "nonaktif"}
-                </Badge>
-              </Table.Td>
-              <Table.Td>
-                <Button size="xs" variant="light" onClick={() => startEdit(u)}>
-                  Edit
-                </Button>
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
+      <Group justify="flex-end">
+        <QuickFilter value={t.query} onChange={t.setQuery} placeholder="Filter user…" testid="users-filter" />
+      </Group>
+      <DataTable<UserOut>
+        data-testid="users-table"
+        minHeight={180}
+        withTableBorder
+        borderRadius="md"
+        striped
+        highlightOnHover
+        records={t.paged}
+        idAccessor="id"
+        fetching={list.isLoading}
+        noRecordsText="Belum ada user"
+        page={t.page}
+        onPageChange={t.setPage}
+        totalRecords={t.total}
+        recordsPerPage={t.pageSize}
+        sortStatus={t.sort}
+        onSortStatusChange={t.setSort}
+        columns={[
+          { accessor: "username", sortable: true },
+          {
+            accessor: "role",
+            sortable: true,
+            render: (u) => (
+              <Badge variant="light" color={u.role === "admin" ? "indigo" : "gray"}>
+                {u.role}
+              </Badge>
+            ),
+          },
+          {
+            accessor: "active",
+            title: "aktif",
+            sortable: true,
+            render: (u) => (
+              <Badge variant="light" color={u.active ? "teal" : "gray"}>
+                {u.active ? "aktif" : "nonaktif"}
+              </Badge>
+            ),
+          },
+          {
+            accessor: "actions",
+            title: "",
+            textAlign: "right",
+            render: (u) => (
+              <Button size="xs" variant="light" onClick={() => startEdit(u)}>
+                Edit
+              </Button>
+            ),
+          },
+        ]}
+      />
 
       <Modal opened={opened} onClose={close} title={editing ? "Edit user" : "Tambah user"}>
         <Stack>

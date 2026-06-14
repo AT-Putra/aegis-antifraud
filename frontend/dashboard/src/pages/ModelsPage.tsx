@@ -1,8 +1,11 @@
-import { Badge, Button, Code, Stack, Table } from "@mantine/core";
+import { Badge, Button, Code, Group, Stack } from "@mantine/core";
 import { IconReload } from "@tabler/icons-react";
+import { DataTable } from "mantine-datatable";
 
+import type { ModelOut } from "../api/types";
 import { PageHeader } from "../components/PageHeader";
-import { EmptyState } from "../components/StateViews";
+import { QuickFilter } from "../components/QuickFilter";
+import { useClientTable } from "../lib/clientTable";
 import { useActivateModel, useModels, useRetrain } from "../hooks/admin";
 import { formatTs } from "../lib/tz";
 
@@ -10,6 +13,11 @@ export function ModelsPage() {
   const list = useModels();
   const activate = useActivateModel();
   const retrain = useRetrain();
+
+  const t = useClientTable<ModelOut>(list.data ?? [], {
+    initialSort: { columnAccessor: "version", direction: "desc" },
+    filterKeys: ["algorithm"],
+  });
 
   return (
     <Stack>
@@ -22,41 +30,58 @@ export function ModelsPage() {
           </Button>
         }
       />
-      <Table striped data-testid="models-table">
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>versi</Table.Th>
-            <Table.Th>algoritma</Table.Th>
-            <Table.Th>dilatih</Table.Th>
-            <Table.Th>metrics</Table.Th>
-            <Table.Th>aktif</Table.Th>
-            <Table.Th />
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {(list.data ?? []).map((m) => (
-            <Table.Tr key={m.id}>
-              <Table.Td>{m.version}</Table.Td>
-              <Table.Td>{m.algorithm}</Table.Td>
-              <Table.Td>{m.trained_at ? formatTs(m.trained_at) : "-"}</Table.Td>
-              <Table.Td>
-                <Code>{JSON.stringify(m.metrics ?? {})}</Code>
-              </Table.Td>
-              <Table.Td>{m.active ? <Badge color="teal">aktif</Badge> : ""}</Table.Td>
-              <Table.Td>
-                {!m.active && (
-                  <Button size="xs" variant="light" onClick={() => activate.mutate(m.id)}>
-                    Aktifkan
-                  </Button>
-                )}
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-      {(list.data ?? []).length === 0 && !list.isLoading && (
-        <EmptyState label="Belum ada model" hint="Jalankan retraining untuk menghasilkan versi model pertama." />
-      )}
+      <Group justify="flex-end">
+        <QuickFilter value={t.query} onChange={t.setQuery} placeholder="Filter algoritma…" testid="models-filter" />
+      </Group>
+      <DataTable<ModelOut>
+        data-testid="models-table"
+        minHeight={180}
+        withTableBorder
+        borderRadius="md"
+        striped
+        highlightOnHover
+        records={t.paged}
+        idAccessor="id"
+        fetching={list.isLoading}
+        noRecordsText="Belum ada model"
+        page={t.page}
+        onPageChange={t.setPage}
+        totalRecords={t.total}
+        recordsPerPage={t.pageSize}
+        sortStatus={t.sort}
+        onSortStatusChange={t.setSort}
+        columns={[
+          { accessor: "version", title: "versi", sortable: true },
+          { accessor: "algorithm", title: "algoritma", sortable: true },
+          {
+            accessor: "trained_at",
+            title: "dilatih",
+            sortable: true,
+            render: (m) => (m.trained_at ? formatTs(m.trained_at) : "-"),
+          },
+          {
+            accessor: "metrics",
+            render: (m) => <Code>{JSON.stringify(m.metrics ?? {})}</Code>,
+          },
+          {
+            accessor: "active",
+            title: "aktif",
+            sortable: true,
+            render: (m) => (m.active ? <Badge color="teal">aktif</Badge> : ""),
+          },
+          {
+            accessor: "actions",
+            title: "",
+            textAlign: "right",
+            render: (m) =>
+              m.active ? null : (
+                <Button size="xs" variant="light" onClick={() => activate.mutate(m.id)}>
+                  Aktifkan
+                </Button>
+              ),
+          },
+        ]}
+      />
     </Stack>
   );
 }

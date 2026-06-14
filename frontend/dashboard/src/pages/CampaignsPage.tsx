@@ -1,11 +1,13 @@
-import { Badge, Button, Modal, Select, Stack, Table, Textarea, TextInput } from "@mantine/core";
+import { Badge, Button, Group, Modal, Select, Stack, Textarea, TextInput } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconPlus } from "@tabler/icons-react";
+import { DataTable } from "mantine-datatable";
 import { useState } from "react";
 
 import type { CampaignOut } from "../api/types";
 import { PageHeader } from "../components/PageHeader";
-import { EmptyState } from "../components/StateViews";
+import { QuickFilter } from "../components/QuickFilter";
+import { useClientTable } from "../lib/clientTable";
 import { useCampaigns, useSaveCampaign } from "../hooks/admin";
 
 interface Draft {
@@ -28,6 +30,11 @@ export function CampaignsPage() {
   const [opened, { open, close }] = useDisclosure(false);
   const [d, setD] = useState<Draft>(EMPTY);
   const editing = !!d.id;
+
+  const t = useClientTable<CampaignOut>(list.data ?? [], {
+    initialSort: { columnAccessor: "slug", direction: "asc" },
+    filterKeys: ["slug", "name", "service", "status"],
+  });
 
   const startCreate = () => {
     setD(EMPTY);
@@ -55,45 +62,60 @@ export function CampaignsPage() {
           </Button>
         }
       />
-      <Table striped highlightOnHover data-testid="campaigns-table">
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>slug</Table.Th>
-            <Table.Th>nama</Table.Th>
-            <Table.Th>service</Table.Th>
-            <Table.Th>origins</Table.Th>
-            <Table.Th>status</Table.Th>
-            <Table.Th />
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {(list.data ?? []).map((c) => (
-            <Table.Tr key={c.id}>
-              <Table.Td>{c.slug}</Table.Td>
-              <Table.Td>{c.name}</Table.Td>
-              <Table.Td>{c.service}</Table.Td>
-              <Table.Td>
-                <Badge variant="light" color="gray">
-                  {(c.allowed_origins ?? []).length} origin
-                </Badge>
-              </Table.Td>
-              <Table.Td>
-                <Badge color={c.status === "active" ? "teal" : "gray"} variant="light">
-                  {c.status}
-                </Badge>
-              </Table.Td>
-              <Table.Td>
-                <Button size="xs" variant="light" onClick={() => startEdit(c)}>
-                  Edit
-                </Button>
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-      {(list.data ?? []).length === 0 && !list.isLoading && (
-        <EmptyState label="Belum ada campaign" hint="Tambahkan campaign untuk menautkan pre-landing portabel ke suatu layanan." />
-      )}
+      <Group justify="flex-end">
+        <QuickFilter value={t.query} onChange={t.setQuery} placeholder="Filter campaign…" testid="campaigns-filter" />
+      </Group>
+      <DataTable<CampaignOut>
+        data-testid="campaigns-table"
+        minHeight={180}
+        withTableBorder
+        borderRadius="md"
+        striped
+        highlightOnHover
+        records={t.paged}
+        idAccessor="id"
+        fetching={list.isLoading}
+        noRecordsText="Belum ada campaign"
+        page={t.page}
+        onPageChange={t.setPage}
+        totalRecords={t.total}
+        recordsPerPage={t.pageSize}
+        sortStatus={t.sort}
+        onSortStatusChange={t.setSort}
+        columns={[
+          { accessor: "slug", sortable: true },
+          { accessor: "name", title: "nama", sortable: true },
+          { accessor: "service", sortable: true },
+          {
+            accessor: "allowed_origins",
+            title: "origins",
+            render: (c) => (
+              <Badge variant="light" color="gray">
+                {(c.allowed_origins ?? []).length} origin
+              </Badge>
+            ),
+          },
+          {
+            accessor: "status",
+            sortable: true,
+            render: (c) => (
+              <Badge color={c.status === "active" ? "teal" : "gray"} variant="light">
+                {c.status}
+              </Badge>
+            ),
+          },
+          {
+            accessor: "actions",
+            title: "",
+            textAlign: "right",
+            render: (c) => (
+              <Button size="xs" variant="light" onClick={() => startEdit(c)}>
+                Edit
+              </Button>
+            ),
+          },
+        ]}
+      />
 
       <Modal opened={opened} onClose={close} title={editing ? "Edit campaign" : "Tambah campaign"}>
         <Stack>

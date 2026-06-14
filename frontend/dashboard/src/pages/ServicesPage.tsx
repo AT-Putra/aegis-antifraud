@@ -1,11 +1,13 @@
-import { Badge, Button, Modal, Select, Stack, Table, TextInput } from "@mantine/core";
+import { Badge, Button, Group, Modal, Select, Stack, TextInput } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconPlus } from "@tabler/icons-react";
+import { DataTable } from "mantine-datatable";
 import { useState } from "react";
 
 import type { ServiceOut } from "../api/types";
 import { PageHeader } from "../components/PageHeader";
-import { EmptyState } from "../components/StateViews";
+import { QuickFilter } from "../components/QuickFilter";
+import { useClientTable } from "../lib/clientTable";
 import { useSaveService, useServices } from "../hooks/admin";
 
 interface Draft {
@@ -25,6 +27,11 @@ export function ServicesPage() {
   const [opened, { open, close }] = useDisclosure(false);
   const [d, setD] = useState<Draft>(EMPTY);
   const editing = !!d.id;
+
+  const t = useClientTable<ServiceOut>(list.data ?? [], {
+    initialSort: { columnAccessor: "slug", direction: "asc" },
+    filterKeys: ["slug", "name", "operator", "status"],
+  });
 
   const startCreate = () => {
     setD(EMPTY);
@@ -53,39 +60,51 @@ export function ServicesPage() {
           </Button>
         }
       />
-      <Table striped highlightOnHover data-testid="services-table">
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>slug</Table.Th>
-            <Table.Th>nama</Table.Th>
-            <Table.Th>operator</Table.Th>
-            <Table.Th>status</Table.Th>
-            <Table.Th />
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {(list.data ?? []).map((s) => (
-            <Table.Tr key={s.id}>
-              <Table.Td>{s.slug}</Table.Td>
-              <Table.Td>{s.name}</Table.Td>
-              <Table.Td>{s.operator}</Table.Td>
-              <Table.Td>
-                <Badge color={s.status === "active" ? "teal" : "gray"} variant="light">
-                  {s.status}
-                </Badge>
-              </Table.Td>
-              <Table.Td>
-                <Button size="xs" variant="light" onClick={() => startEdit(s)}>
-                  Edit
-                </Button>
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-      {(list.data ?? []).length === 0 && !list.isLoading && (
-        <EmptyState label="Belum ada layanan" hint="Tambahkan layanan pertama untuk mulai memvalidasi traffic." />
-      )}
+      <Group justify="flex-end">
+        <QuickFilter value={t.query} onChange={t.setQuery} placeholder="Filter layanan…" testid="services-filter" />
+      </Group>
+      <DataTable<ServiceOut>
+        data-testid="services-table"
+        minHeight={180}
+        withTableBorder
+        borderRadius="md"
+        striped
+        highlightOnHover
+        records={t.paged}
+        idAccessor="id"
+        fetching={list.isLoading}
+        noRecordsText="Belum ada layanan"
+        page={t.page}
+        onPageChange={t.setPage}
+        totalRecords={t.total}
+        recordsPerPage={t.pageSize}
+        sortStatus={t.sort}
+        onSortStatusChange={t.setSort}
+        columns={[
+          { accessor: "slug", sortable: true },
+          { accessor: "name", title: "nama", sortable: true },
+          { accessor: "operator", sortable: true },
+          {
+            accessor: "status",
+            sortable: true,
+            render: (s) => (
+              <Badge color={s.status === "active" ? "teal" : "gray"} variant="light">
+                {s.status}
+              </Badge>
+            ),
+          },
+          {
+            accessor: "actions",
+            title: "",
+            textAlign: "right",
+            render: (s) => (
+              <Button size="xs" variant="light" onClick={() => startEdit(s)}>
+                Edit
+              </Button>
+            ),
+          },
+        ]}
+      />
 
       <Modal opened={opened} onClose={close} title={editing ? "Edit layanan" : "Tambah layanan"}>
         <Stack>

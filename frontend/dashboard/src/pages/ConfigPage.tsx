@@ -1,7 +1,10 @@
-import { Alert, Button, Card, Group, JsonInput, NumberInput, Stack, Table, Text } from "@mantine/core";
+import { Alert, Button, Card, Group, JsonInput, NumberInput, Stack, Text } from "@mantine/core";
+import { DataTable } from "mantine-datatable";
 import { useEffect, useState } from "react";
 
+import type { ConfigVersionItem } from "../api/types";
 import { PageHeader } from "../components/PageHeader";
+import { useClientTable } from "../lib/clientTable";
 import { fetchConfigVersion, useConfig, useConfigVersions, usePutConfig } from "../hooks/admin";
 import { formatTs } from "../lib/tz";
 
@@ -14,6 +17,10 @@ export function ConfigPage() {
   const [blend, setBlend] = useState("{}");
   const [threshold, setThreshold] = useState<number>(0.5);
   const [err, setErr] = useState<string | null>(null);
+
+  const t = useClientTable<ConfigVersionItem>(versions.data ?? [], {
+    initialSort: { columnAccessor: "version", direction: "desc" },
+  });
 
   useEffect(() => {
     if (cfg.data) {
@@ -74,30 +81,49 @@ export function ConfigPage() {
         <Text fw={600} mb="sm">
           Riwayat versi (rollback: Muat → Simpan)
         </Text>
-        <Table data-testid="config-versions">
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>versi</Table.Th>
-              <Table.Th>dibuat</Table.Th>
-              <Table.Th>aktif</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {(versions.data ?? []).map((v) => (
-              <Table.Tr key={v.version}>
-                <Table.Td>{v.version}</Table.Td>
-                <Table.Td>{formatTs(v.created_at)}</Table.Td>
-                <Table.Td>{v.active ? "✓" : ""}</Table.Td>
-                <Table.Td>
-                  <Button size="xs" variant="light" onClick={() => loadVersion(v.version)}>
-                    Muat
-                  </Button>
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+        <DataTable<ConfigVersionItem>
+          data-testid="config-versions"
+          minHeight={160}
+          withTableBorder
+          borderRadius="md"
+          striped
+          highlightOnHover
+          records={t.paged}
+          idAccessor="version"
+          fetching={versions.isLoading}
+          noRecordsText="Belum ada versi"
+          page={t.page}
+          onPageChange={t.setPage}
+          totalRecords={t.total}
+          recordsPerPage={t.pageSize}
+          sortStatus={t.sort}
+          onSortStatusChange={t.setSort}
+          columns={[
+            { accessor: "version", title: "versi", sortable: true },
+            {
+              accessor: "created_at",
+              title: "dibuat",
+              sortable: true,
+              render: (v) => formatTs(v.created_at),
+            },
+            {
+              accessor: "active",
+              title: "aktif",
+              sortable: true,
+              render: (v) => (v.active ? "✓" : ""),
+            },
+            {
+              accessor: "actions",
+              title: "",
+              textAlign: "right",
+              render: (v) => (
+                <Button size="xs" variant="light" onClick={() => loadVersion(v.version)}>
+                  Muat
+                </Button>
+              ),
+            },
+          ]}
+        />
       </Card>
     </Stack>
   );

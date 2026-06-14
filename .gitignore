@@ -16,6 +16,9 @@ eggs/
 .eggs/
 lib/
 lib64/
+# Python build-artifact rule `lib/` di atas tak boleh menelan source frontend.
+!frontend/dashboard/src/lib/
+!frontend/dashboard/src/lib/**
 parts/
 sdist/
 var/
