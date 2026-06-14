@@ -22,6 +22,7 @@ from aegis.db.olap import traffic_repo
 from aegis.db.oltp import decisions_repo
 from aegis.db.postgres import connection
 from aegis.features.device_info import parse_device_info
+from aegis.features.extract import extract_features
 from aegis.features.schema import FeatureInput
 from aegis.fingerprint.service import lookup_or_register
 from aegis.ml.loader import load_active_models
@@ -260,6 +261,7 @@ def main(n: int) -> int:
             signals=signals, ip_intel=ip_intel, device_info=device_info,
             device_history={"event_count": device.event_count, "is_new": device.is_new},
         )
+        features = extract_features(feature_input)  # fitur turunan setia → explainability stored
         outcome = score(feature_input, config=cfg, models=models)
 
         svc, camp, svc_id, camp_id = RNG.choice(pairs)
@@ -284,7 +286,7 @@ def main(n: int) -> int:
             trx_id=trx, device_id=device.device_id,
             service=svc, campaign=camp, source=source, pub_id=pub_id,
             signals=signals.model_dump(),
-            features={},  # fitur turunan tak diperlukan untuk feed; engine sudah skor
+            features=features,  # fitur turunan setia (skew-free) → halaman detail explainability
             ip_intel=ip_intel, decision=outcome.decision, final_score=outcome.final_score,
             weboptin_status=weboptin_status,
             rules_version=outcome.rules_version, model_version=outcome.model_version,

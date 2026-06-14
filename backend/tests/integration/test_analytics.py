@@ -163,6 +163,82 @@ def test_decision_detail_404(ch, client, auth) -> None:
     assert r.status_code == 404
 
 
+def _seed_oltp_decision(trx: str, *, decision: str, reason: str | None,
+                        rules_version: int = 1, threshold: float = 0.5) -> None:
+    """Sisipkan baris OLTP `decisions` (sumber rules_version/threshold/reason di detail).
+
+    FK device_id/service_id dibiarkan NULL (nullable) → tak perlu seed device/service.
+    """
+    s = get_settings()
+    with psycopg.connect(s.postgres_dsn) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO decisions (trx_id, decision, threshold_used, rules_version, reason, "
+            "weboptin_status) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (trx_id) DO NOTHING",
+            (trx, decision, threshold, rules_version, reason,
+             "na" if decision == "block" else "minted"),
+        )
+        conn.commit()
+
+
+def test_decision_detail_explainability_stored_features(ch, client, auth) -> None:
+    """Fitur tersimpan → explainability.available, feature_source=stored_features, faktor benar."""
+    svc = f"ana-x-{uuid.uuid4().hex[:8]}"
+    trx = f"t-{uuid.uuid4().hex[:8]}"
+    # automation_score=1.0 (×0.2) + webview_risk=1.0 (×0.3) = rules 0.5
+    feats = {"automation_score": 1.0, "webview_risk": 1.0}
+    ch.insert("traffic_events", [
+        _traffic_row(trx=trx, service=svc, source="fb", pub_id="1", decision="block",
+                     ts=datetime(2030, 6, 2, 6, 0, 0), weboptin_status="na",
+                     features=feats, final_score=0.5,
+                     breakdown={"rules": 0.5, "isolation_forest": None, "lightgbm": None}),
+    ], column_names=_TRAFFIC_COLS)
+    _seed_oltp_decision(trx, decision="block", reason=None, rules_version=1, threshold=0.5)
+
+    d = client.get(f"/v1/analytics/decision/{trx}", headers=auth).json()
+    ex = d["explainability"]
+    assert ex["available"] is True
+    assert ex["feature_source"] == "stored_features"
+    assert ex["rules_version_used"] == 1
+    contrib = {f["name"]: f["contribution"] for f in ex["rules"]["factors"]}
+    assert contrib["automation_score"] == 0.2
+    assert contrib["webview_risk"] == 0.3
+    assert ex["rules"]["soft_score"] == 0.5
+    assert ex["models"]["attribution_available"] is False
+
+
+def test_decision_detail_explainability_recomputed(ch, client, auth) -> None:
+    """OLAP features kosong + signals valid → recomputed_from_signals + warnings."""
+    svc = f"ana-rc-{uuid.uuid4().hex[:8]}"
+    trx = f"t-{uuid.uuid4().hex[:8]}"
+    signals = {"fingerprint": {"canvas_hash": "c1", "browser_environment": {"is_webview": False}},
+               "behavior": {"mouse": {"move_count": 0}}, "automation_hints": {"webdriver": False}}
+    ch.insert("traffic_events", [
+        _traffic_row(trx=trx, service=svc, source="fb", pub_id="1", decision="allow",
+                     ts=datetime(2030, 6, 3, 6, 0, 0), signals=signals, features={},
+                     breakdown={"rules": 0.2, "isolation_forest": None, "lightgbm": None}),
+    ], column_names=_TRAFFIC_COLS)
+    _seed_oltp_decision(trx, decision="allow", reason=None, rules_version=1, threshold=0.5)
+
+    d = client.get(f"/v1/analytics/decision/{trx}", headers=auth).json()
+    ex = d["explainability"]
+    assert ex["available"] is True
+    assert ex["feature_source"] == "recomputed_from_signals"
+    assert ex["warnings"]  # ada peringatan rekonstruksi terdegradasi
+
+
+def test_decision_detail_explainability_degraded_no_oltp(ch, client, auth) -> None:
+    """Tanpa baris OLTP (rules_version tak diketahui) → available:false, tetap 200 (bukan 500)."""
+    svc = f"ana-dg-{uuid.uuid4().hex[:8]}"
+    trx = f"t-{uuid.uuid4().hex[:8]}"
+    ch.insert("traffic_events", [
+        _traffic_row(trx=trx, service=svc, source="fb", pub_id="1", decision="block",
+                     ts=datetime(2030, 6, 4, 6, 0, 0), weboptin_status="na"),
+    ], column_names=_TRAFFIC_COLS)
+    r = client.get(f"/v1/analytics/decision/{trx}", headers=auth)
+    assert r.status_code == 200
+    assert r.json()["explainability"]["available"] is False
+
+
 def test_stream_emits_event(ch, client, auth) -> None:
     svc = f"ana-st-{uuid.uuid4().hex[:8]}"
     trx = f"t-{uuid.uuid4().hex[:8]}"

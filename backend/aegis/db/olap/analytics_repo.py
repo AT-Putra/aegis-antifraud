@@ -426,13 +426,105 @@ def _outcomes(trx_id: str) -> list[dict]:
         return outcomes_repo.list_by_trx(conn, trx_id)
 
 
+def _config_by_version(version: int | None) -> dict | None:
+    """Config rules HISTORIS by versi (penjelasan setia ke saat keputusan dibuat)."""
+    if version is None:
+        return None
+    from aegis.db.oltp import rule_configs_repo
+
+    with connection() as conn:
+        return rule_configs_repo.get_by_version(conn, version)
+
+
+def _recompute_features(signals_raw: dict, ip_stored: dict) -> tuple[dict, list[str]]:
+    """Rekonstruksi best-effort fitur dari `signals` saat OLAP `features` kosong.
+
+    Terdegradasi: `ip_is_datacenter` tak presisi (didekati dari connection_type) & device
+    history hilang → kembalikan warnings agar UI jujur.
+    """
+    from aegis.features.extract import extract_features
+    from aegis.features.schema import FeatureInput
+    from aegis.schemas.scoring import Signals
+
+    warnings: list[str] = []
+    conn_type = (ip_stored.get("connection_type") or "").lower()
+    ip_intel = {
+        "vpn_proxy_tor": bool(ip_stored.get("vpn_proxy_tor")),
+        "is_datacenter": conn_type in ("hosting", "datacenter"),
+        "is_mobile_carrier": conn_type == "mobile",
+        "ip_reputation": ip_stored.get("ip_reputation"),
+    }
+    warnings.append(
+        "Fitur direkonstruksi dari signals (OLAP features kosong); "
+        "ip_is_datacenter didekati dari connection_type, device history tak tersedia."
+    )
+    feature_input = FeatureInput(
+        signals=Signals.model_validate(signals_raw),
+        ip_intel=ip_intel,
+        device_info=None,
+        device_history={},
+    )
+    return extract_features(feature_input), warnings
+
+
+def _attach_explainability(
+    detail: dict, *, features_raw: dict, oltp: dict | None
+) -> None:
+    """Susun & lampirkan `detail["explainability"]` (03 §7). Degradasi anggun → available:false.
+
+    Tak pernah menggagalkan endpoint detail: bila apa pun gagal, set available:false.
+    """
+    from aegis.scoring.explain import build_decision_explainability
+
+    try:
+        rules_version = (oltp or {}).get("rules_version")
+        cfg = _config_by_version(rules_version)
+        params = (cfg or {}).get("params") or {}
+        blend_weights = (cfg or {}).get("blend_weights") or {}
+        threshold = (
+            float(cfg["threshold"]) if cfg and cfg.get("threshold") is not None
+            else (oltp or {}).get("threshold_used")
+        )
+        if threshold is None:
+            detail["explainability"] = {"available": False, "version": "1",
+                                        "feature_source": "unavailable", "warnings": [],
+                                        "rules_version_used": rules_version}
+            return
+
+        warnings: list[str] = []
+        if features_raw:
+            features = features_raw
+            feature_source = "stored_features"
+        else:
+            features, warnings = _recompute_features(detail.get("signals") or {},
+                                                      detail.get("ip_intelligence") or {})
+            feature_source = "recomputed_from_signals"
+
+        detail["explainability"] = build_decision_explainability(
+            features,
+            params=params,
+            score_breakdown=detail.get("score_breakdown") or {},
+            blend_weights=blend_weights,
+            final_score=detail.get("final_score"),
+            threshold=float(threshold),
+            decision=detail.get("decision", "unknown"),
+            reason=(detail.get("outcome") or {}).get("reason"),
+            feature_source=feature_source,
+            rules_version_used=rules_version,
+            warnings=warnings,
+        )
+    except Exception:
+        detail["explainability"] = {"available": False, "version": "1",
+                                    "feature_source": "unavailable", "warnings": []}
+
+
 def decision_detail(trx_id: str, *, settings: Settings | None = None) -> dict | None:
     s = settings or get_settings()
     rows = _get_client(s).query(
         "SELECT trx_id, device_id, service, source, pub_id, decision, weboptin_status, "
         "final_score, signals, ip_country, ip_asn, ip_isp, connection_type, vpn_proxy_tor, "
         "ip_reputation, browser, os, device_type, device_brand, device_model, is_webview, "
-        "score_breakdown, campaign FROM traffic_events WHERE trx_id = {trx:String} "
+        "score_breakdown, campaign, features FROM traffic_events WHERE trx_id = {trx:String} "
         "ORDER BY ts DESC LIMIT 1",
         parameters={"trx": trx_id},
     ).result_rows
@@ -444,6 +536,7 @@ def decision_detail(trx_id: str, *, settings: Settings | None = None) -> dict | 
     if rows:
         r = rows[0]
         breakdown_raw = json.loads(r[21]) if r[21] else {}
+        features_raw = json.loads(r[23]) if r[23] else {}
         detail = {
             "trx_id": r[0], "device_id": r[1] or None, "service": r[2] or None,
             "campaign": r[22] or None,
@@ -466,6 +559,7 @@ def decision_detail(trx_id: str, *, settings: Settings | None = None) -> dict | 
             },
         }
     else:  # OLAP hilang → detail minimal dari OLTP
+        features_raw = {}
         detail = {
             "trx_id": trx_id, "decision": "unknown", "final_score": None,
             "signals": {}, "ip_intelligence": {}, "device_info": {},
@@ -481,6 +575,7 @@ def decision_detail(trx_id: str, *, settings: Settings | None = None) -> dict | 
         "threshold_used": (oltp or {}).get("threshold_used"),
         "callbacks": _outcomes(trx_id),
     }
+    _attach_explainability(detail, features_raw=features_raw, oltp=oltp)
     return detail
 
 

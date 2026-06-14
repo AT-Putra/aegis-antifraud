@@ -12,6 +12,7 @@ import {
   Group,
   Progress,
   Stack,
+  Table,
   Text,
   TextInput,
   ThemeIcon,
@@ -19,16 +20,21 @@ import {
 } from "@mantine/core";
 import {
   IconActivity,
+  IconAlertTriangle,
   IconCode,
   IconCpu,
   IconDeviceMobile,
+  IconInfoCircle,
   IconRoute,
+  IconScale,
+  IconShieldLock,
   IconWorld,
   type Icon,
 } from "@tabler/icons-react";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 
+import type { Explainability } from "../api/types";
 import { DecisionBadge } from "../components/DecisionBadge";
 import { KeyValue, fmt } from "../components/KeyValue";
 import { ErrorState, LoadingRows } from "../components/StateViews";
@@ -88,6 +94,169 @@ function FlagCard({ trxId }: { trxId: string }) {
         </Button>
       </Group>
     </Card>
+  );
+}
+
+const n3 = (v: number | null | undefined) => (typeof v === "number" ? v.toFixed(3) : "—");
+
+// Penjelasan audit-grade: kenapa skor rules tersusun begitu + komposisi final_score.
+function ExplainabilitySection({ ex }: { ex: Explainability }) {
+  if (!ex.available) {
+    return (
+      <Alert color="gray" icon={<IconInfoCircle size={16} />} data-testid="explain-unavailable">
+        Penjelasan rinci tak tersedia untuk keputusan ini (data lama/terdegradasi). Lihat skor
+        breakdown agregat di atas.
+      </Alert>
+    );
+  }
+  const rules = ex.rules;
+  const blend = ex.blend;
+  const hardForced = rules?.applied_mode === "hard_rule";
+  const degraded = ex.feature_source && ex.feature_source !== "stored_features";
+
+  return (
+    <Stack data-testid="explainability">
+      {ex.rationale && (
+        <Alert color={blend?.decision === "block" ? "red" : "teal"} icon={<IconScale size={16} />}>
+          {ex.rationale}
+        </Alert>
+      )}
+
+      {hardForced && (
+        <Alert color="red" icon={<IconShieldLock size={16} />} data-testid="hard-rule-alert">
+          Diblokir oleh <b>hard-rule</b>: {rules?.hard_rules_triggered.join(", ")}. Skor model
+          diabaikan (block paksa) — skor formula tetap ditampilkan sebagai konteks.
+        </Alert>
+      )}
+
+      {degraded && (
+        <Alert color="yellow" icon={<IconAlertTriangle size={16} />} data-testid="feature-source-warning">
+          <Text size="sm" fw={600} mb={4}>
+            Fitur direkonstruksi ({ex.feature_source})
+          </Text>
+          {(ex.warnings ?? []).map((w, i) => (
+            <Text size="sm" key={i}>
+              • {w}
+            </Text>
+          ))}
+        </Alert>
+      )}
+
+      {rules && (
+        <SectionCard icon={IconActivity} title="Penjelasan skor rules">
+          <Stack gap="sm">
+            <Code block>{rules.formula}</Code>
+            <Table withTableBorder withColumnBorders striped>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Faktor</Table.Th>
+                  <Table.Th>Nilai</Table.Th>
+                  <Table.Th>Bobot</Table.Th>
+                  <Table.Th>Kontribusi</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {rules.factors.map((f) => (
+                  <Table.Tr key={f.name}>
+                    <Table.Td>{f.label}</Table.Td>
+                    <Table.Td>{n3(f.value)}</Table.Td>
+                    <Table.Td>{f.weight}</Table.Td>
+                    <Table.Td fw={f.contribution > 0 ? 600 : 400}>{n3(f.contribution)}</Table.Td>
+                  </Table.Tr>
+                ))}
+                <Table.Tr>
+                  <Table.Td colSpan={3} ta="right" fw={600}>
+                    Skor formula (soft)
+                  </Table.Td>
+                  <Table.Td fw={700}>{n3(rules.soft_score)}</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td colSpan={3} ta="right" fw={600}>
+                    Skor rules efektif
+                  </Table.Td>
+                  <Table.Td fw={700}>
+                    {n3(rules.effective_score)}
+                    {hardForced && (
+                      <Badge color="red" variant="light" ml="xs" size="sm">
+                        hard-rule
+                      </Badge>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              </Table.Tbody>
+            </Table>
+            <Group gap="xs" wrap="wrap">
+              <Text size="xs" c="dimmed">
+                Hard-rule aktif:
+              </Text>
+              {rules.hard_rules_enabled.map((r) => (
+                <Badge
+                  key={r}
+                  size="sm"
+                  variant="light"
+                  color={rules.hard_rules_triggered.includes(r) ? "red" : "gray"}
+                >
+                  {r}
+                </Badge>
+              ))}
+            </Group>
+          </Stack>
+        </SectionCard>
+      )}
+
+      {blend && (
+        <SectionCard icon={IconScale} title="Komposisi skor akhir">
+          <Stack gap="sm">
+            <Table withTableBorder withColumnBorders striped>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Komponen</Table.Th>
+                  <Table.Th>Skor</Table.Th>
+                  <Table.Th>Bobot</Table.Th>
+                  <Table.Th>Bobot ternorm.</Table.Th>
+                  <Table.Th>Kontribusi</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {blend.components.map((c) => (
+                  <Table.Tr key={c.name} c={c.applied ? undefined : "dimmed"}>
+                    <Table.Td>
+                      {c.label}
+                      {!c.applied && (
+                        <Badge color="gray" variant="light" ml="xs" size="xs">
+                          tak dipakai
+                        </Badge>
+                      )}
+                    </Table.Td>
+                    <Table.Td>{n3(c.score)}</Table.Td>
+                    <Table.Td>{c.weight}</Table.Td>
+                    <Table.Td>{n3(c.normalized_weight)}</Table.Td>
+                    <Table.Td fw={c.applied ? 600 : 400}>{n3(c.contribution)}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+            <Group justify="space-between">
+              <Text size="sm" c="dimmed">
+                mode: <Code>{blend.mode}</Code>
+              </Text>
+              <Group gap={6} align="center">
+                <Text size="sm">
+                  skor akhir <b>{n3(blend.final_score)}</b>{" "}
+                  {blend.decision === "block" ? "≥" : "<"} ambang {blend.threshold} →
+                </Text>
+                <DecisionBadge decision={blend.decision} />
+              </Group>
+            </Group>
+          </Stack>
+        </SectionCard>
+      )}
+
+      <Alert color="blue" icon={<IconInfoCircle size={16} />}>
+        {ex.models?.note ??
+          "Skor IF/LightGBM ditampilkan sebagai skalar × bobot blend. Atribusi per-fitur (SHAP) belum tersedia."}
+      </Alert>
+    </Stack>
   );
 }
 
@@ -216,6 +385,9 @@ export function DecisionPage() {
           </SectionCard>
         </Grid.Col>
       </Grid>
+
+      {/* Penjelasan audit-grade (03 §7) — kenapa skor & keputusan begini. */}
+      {d.explainability && <ExplainabilitySection ex={d.explainability} />}
 
       {/* Fallback JSON mentah — sinyal free-form & seluruh objek (defensif). */}
       <Accordion variant="separated" chevronPosition="left">

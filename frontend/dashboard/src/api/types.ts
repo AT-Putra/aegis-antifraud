@@ -61,6 +61,51 @@ export interface SearchResultItem {
   ts: string;
 }
 
+// Penjelasan audit-grade keputusan (03 §7). Opsional: absen/available:false utk baris lama.
+export interface RuleFactor {
+  name: string;
+  label: string;
+  value: number;
+  weight: number;
+  contribution: number;
+}
+export interface BlendComponent {
+  name: string;
+  label: string;
+  score: number | null;
+  weight: number;
+  normalized_weight: number;
+  contribution: number;
+  applied: boolean;
+}
+export interface Explainability {
+  available: boolean;
+  version?: string;
+  feature_source?: string;
+  warnings?: string[];
+  rules_version_used?: number | null;
+  rules?: {
+    formula: string;
+    applied_mode: string;
+    soft_sum: number;
+    soft_score: number;
+    effective_score: number;
+    hard_rules_enabled: string[];
+    hard_rules_triggered: string[];
+    factors: RuleFactor[];
+  };
+  blend?: {
+    final_score: number | null;
+    threshold: number;
+    decision: string;
+    reason: string | null;
+    mode: string;
+    components: BlendComponent[];
+  };
+  models?: { attribution_available: boolean; note: string };
+  rationale?: string;
+}
+
 export interface DecisionDetail {
   trx_id: string;
   device_id: string | null;
@@ -79,6 +124,7 @@ export interface DecisionDetail {
   rules_version: number | null;
   model_version: number | null;
   outcome: Record<string, unknown> | null;
+  explainability?: Explainability | null;
 }
 
 // --- Admin (03 §6) ---

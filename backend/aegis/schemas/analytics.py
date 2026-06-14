@@ -82,3 +82,4 @@ class DecisionDetail(BaseModel):
     rules_version: int | None = None
     model_version: int | None = None
     outcome: dict | None = None
+    explainability: dict | None = None  # audit-grade (03 §7); absen/available:false utk baris lama
