@@ -64,6 +64,19 @@ describe("alur pre-landing (AC-PL-01/02/03)", () => {
     expect(body.signals).toBeTruthy();
   });
 
+  it("#9: allow dgn redirect_url non-https → TIDAK navigate (defense-in-depth)", async () => {
+    server.use(
+      OK_INIT,
+      http.post(`${BASE}/v1/score`, () =>
+        HttpResponse.json({ decision: "allow", redirect_url: "javascript:alert(1)" }),
+      ),
+    );
+    const navigate = vi.fn();
+    const r = await run({ search: "?trx_id=trx9&service=svc&campaign=promo", navigate });
+    await r.clickCta!();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it("AC-PL-02: block → tampilkan notice", async () => {
     server.use(
       OK_INIT,

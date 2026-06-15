@@ -73,6 +73,13 @@ async function submit(
   try {
     const res = await score(params, token, signals);
     if (res.decision === "allow") {
+      // Defense-in-depth: backend sudah menjamin web-opt-in URL https (CP client tolak
+      // non-https). Tetap verifikasi di klien agar tak pernah navigate ke skema berbahaya
+      // (javascript:/data:/dll) bila kontrak backend berubah.
+      if (!isSafeRedirectUrl(res.redirect_url)) {
+        ui.renderStopped("Terjadi kesalahan.");
+        return;
+      }
       ui.renderRedirecting();
       navigate(res.redirect_url);
     } else {
@@ -106,6 +113,16 @@ async function retry(
 
 function initMessage(e: ApiError): string {
   return INIT_ERRORS[e.code] ?? "Layanan sedang tidak tersedia. Coba lagi nanti.";
+}
+
+/** Hanya izinkan redirect ke URL absolut https (mirror kontrak backend; tolak javascript:/data:/dll). */
+export function isSafeRedirectUrl(url: unknown): boolean {
+  if (typeof url !== "string") return false;
+  try {
+    return new URL(url).protocol === "https:";
+  } catch {
+    return false; // bukan URL absolut valid → tolak
+  }
 }
 
 function nowMs(): number {
