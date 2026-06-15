@@ -22,6 +22,7 @@ services:
       timeout: 5s
       retries: 5
     mem_limit: ${POSTGRES_MEM_LIMIT:-2g}
+    cpus: ${POSTGRES_CPUS:-2}
     restart: unless-stopped
     networks: [aegis]
 
@@ -49,6 +50,7 @@ services:
       timeout: 5s
       retries: 5
     mem_limit: ${CLICKHOUSE_MEM_LIMIT:-2g}
+    cpus: ${CLICKHOUSE_CPUS:-2}
     restart: unless-stopped
     networks: [aegis]
 
@@ -63,6 +65,7 @@ services:
       timeout: 5s
       retries: 5
     mem_limit: ${REDIS_MEM_LIMIT:-512m}
+    cpus: ${REDIS_CPUS:-1}
     restart: unless-stopped
     networks: [aegis]
 
@@ -84,6 +87,13 @@ services:
     volumes:
       - models:/models          # artefak model (shared api ↔ job retrain T-17)
     mem_limit: ${API_MEM_LIMIT:-2g}
+    cpus: ${API_CPUS:-2}
+    # T-20 hardening: API = kode kita, tak butuh capability Linux apa pun (bind :8000
+    # non-privileged). cap_drop ALL + no-new-privileges = defense-in-depth bila ada RCE.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     networks: [aegis]
 
@@ -102,6 +112,14 @@ services:
       - caddydata:/data
       - caddyconfig:/config
     mem_limit: ${CADDY_MEM_LIMIT:-256m}
+    cpus: ${CADDY_CPUS:-1}
+    # T-20 hardening: Caddy bind :80/:443 (privileged) → pertahankan NET_BIND_SERVICE saja.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
     restart: unless-stopped
     networks: [aegis]
 
@@ -115,6 +133,7 @@ services:
       - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - promdata:/prometheus
     mem_limit: ${PROMETHEUS_MEM_LIMIT:-512m}
+    cpus: ${PROMETHEUS_CPUS:-1}
     restart: unless-stopped
     networks: [aegis]
 
@@ -133,6 +152,7 @@ services:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafanadata:/var/lib/grafana
     mem_limit: ${GRAFANA_MEM_LIMIT:-512m}
+    cpus: ${GRAFANA_CPUS:-1}
     restart: unless-stopped
     networks: [aegis]
 
