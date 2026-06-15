@@ -13,7 +13,7 @@ from fastapi import FastAPI, Response
 
 from aegis import __version__
 from aegis.api import admin, analytics, auth, callbacks, scoring
-from aegis.config import get_settings
+from aegis.config import get_settings, is_weak_secret
 from aegis.core import metrics
 from aegis.core.logging import setup_logging
 from aegis.core.middleware import MetricsMiddleware
@@ -34,6 +34,17 @@ def _bootstrap_admin() -> None:
     s = get_settings()
     if not (s.admin_bootstrap_username and s.admin_bootstrap_password):
         return
+    # T-20: di produksi, tolak bootstrap dgn kredensial lemah/default — jangan
+    # diam-diam membuat admin yang mudah ditebak. Gagal startup agar terlihat.
+    if s.is_production and (
+        is_weak_secret(s.admin_bootstrap_password) or is_weak_secret(s.admin_bootstrap_username)
+    ):
+        raise RuntimeError(
+            "APP_ENV="
+            f"{s.app_env}: ADMIN_BOOTSTRAP_USERNAME/PASSWORD lemah atau default. "
+            "Set username non-generik & password acak kuat (≥32 karakter, tanpa pola "
+            "'change-me/dev-/admin/password/secret') sebelum bootstrap di produksi."
+        )
     try:
         with connection() as conn:
             if users_repo.count(conn) > 0:
@@ -51,6 +62,7 @@ def _bootstrap_admin() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    get_settings().validate_production()  # T-20 gate: fail-fast secret lemah di prod
     _bootstrap_admin()
     try:
         app.state.config = load_active_config()
@@ -66,7 +78,16 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Aegis Anti Fraud", version=__version__, lifespan=lifespan)
+# T-20: matikan /docs, /redoc, /openapi.json di luar development (defense-in-depth —
+# kurangi permukaan recon bila topologi ingress berubah / port ter-publish tak sengaja).
+_docs_kwargs = (
+    {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    if get_settings().is_production
+    else {}
+)
+app = FastAPI(
+    title="Aegis Anti Fraud", version=__version__, lifespan=lifespan, **_docs_kwargs
+)
 
 app.add_middleware(DynamicCORSMiddleware)  # CORS per-campaign (D1, F-16)
 app.add_middleware(MetricsMiddleware)  # metrik HTTP (T-18) — outermost
