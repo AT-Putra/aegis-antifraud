@@ -61,10 +61,22 @@ class ResizeObserverStub {
 (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverStub;
 Element.prototype.scrollIntoView = () => {};
 
+// ADR-015: bersihkan cookie (mis. aegis_csrf dari loginAs) agar tak bocor antar-test.
+function clearCookies(): void {
+  for (const c of document.cookie.split(";")) {
+    const name = c.split("=")[0].trim();
+    if (name) document.cookie = `${name}=;expires=${new Date(0).toUTCString()};path=/`;
+  }
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: "bypass" }));
 afterEach(() => {
   server.resetHandlers();
   localStorage.clear();
+  clearCookies();
 });
 afterAll(() => server.close());
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  clearCookies();
+});

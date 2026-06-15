@@ -1,8 +1,8 @@
-// SSE via fetch+ReadableStream (bisa kirim Bearer; EventSource tak bisa). K3/D-SSE.
+// SSE via fetch+ReadableStream (kirim cookie auth via credentials; EventSource tak fleksibel).
+// ADR-015: auth = cookie httpOnly (otomatis terkirim), bukan Bearer. K3/D-SSE.
 import { useEffect, useRef, useState } from "react";
 
-import { apiBase, } from "../config";
-import { tokenStore } from "../api/client";
+import { apiBase } from "../config";
 
 export interface StreamEvent {
   event: string;
@@ -47,9 +47,8 @@ export function useStream(enabled = true): StreamState {
     const ac = new AbortController();
     (async () => {
       try {
-        const token = tokenStore.get();
         const resp = await fetch(`${apiBase()}/v1/stream`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          credentials: "include", // cookie auth otomatis (same-origin via Caddy)
           signal: ac.signal,
         });
         if (!resp.body) return;

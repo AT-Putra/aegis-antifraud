@@ -25,6 +25,9 @@ def test_bootstrap_admin_rejects_weak_creds_in_production(monkeypatch) -> None:
 
 def test_bootstrap_admin_noop_when_unset(monkeypatch) -> None:
     # Tanpa username/password: tetap no-op (tidak raise) bahkan di produksi.
+    # Bersihkan env proses (api container memuat .env dev) agar "unset" benar-benar kosong.
+    monkeypatch.delenv("ADMIN_BOOTSTRAP_USERNAME", raising=False)
+    monkeypatch.delenv("ADMIN_BOOTSTRAP_PASSWORD", raising=False)
     s = Settings(_env_file=None, app_env="production")
     monkeypatch.setattr(main, "get_settings", lambda: s)
     main._bootstrap_admin()  # tidak raise, tidak menyentuh DB

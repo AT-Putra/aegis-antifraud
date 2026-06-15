@@ -48,10 +48,12 @@ from aegis.schemas.admin import (
     UserUpdate,
 )
 from aegis.security import origins
+from aegis.security.jwt_auth import verify_csrf
 from aegis.security.passwords import hash_password
 from aegis.services import feedback as feedback_svc
 
-router = APIRouter(prefix="/v1")
+# CSRF double-submit (ADR-015) berlaku ke semua mutasi cookie-auth router ini; GET dilewati.
+router = APIRouter(prefix="/v1", dependencies=[Depends(verify_csrf)])
 
 
 # --- Config (versioned) ---

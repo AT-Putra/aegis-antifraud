@@ -11,6 +11,7 @@ import uuid
 
 import psycopg
 import pytest
+from _authkit import auth_headers
 from fastapi.testclient import TestClient
 
 from aegis.config import get_settings
@@ -18,7 +19,6 @@ from aegis.db.migrate import migrate_oltp
 from aegis.db.oltp import users_repo
 from aegis.db.postgres import connection
 from aegis.registry.service import register_service
-from aegis.security.jwt_auth import create_token
 from aegis.security.passwords import hash_password
 
 
@@ -52,7 +52,7 @@ def _auth(role: str) -> dict:
         users_repo.insert_user(
             conn, username=username, password_hash=hash_password("x"), role=role
         )
-    return {"Authorization": f"Bearer {create_token(username, role)}"}
+    return auth_headers(username, role)
 
 
 def _service() -> str:

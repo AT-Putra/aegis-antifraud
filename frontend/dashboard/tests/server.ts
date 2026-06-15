@@ -5,8 +5,9 @@ const B = "http://localhost";
 
 // Handler default (bisa di-override per-test via server.use()).
 export const handlers = [
+  // ADR-015: default = belum login (401). loginAs() meng-override agar mengembalikan role.
   http.get(`${B}/v1/users/me`, () =>
-    HttpResponse.json({ id: "u1", username: "admin", role: "admin", timezone: "Asia/Jakarta" }),
+    HttpResponse.json({ code: "unauthorized", message: "no session" }, { status: 401 }),
   ),
   http.get(`${B}/v1/analytics/summary`, () =>
     HttpResponse.json({

@@ -10,13 +10,14 @@ import uuid
 
 import psycopg
 import pytest
+from _authkit import auth_cookies_only, auth_headers
 from fastapi.testclient import TestClient
 
 from aegis.config import get_settings
 from aegis.db.migrate import migrate_oltp
 from aegis.db.oltp import users_repo
 from aegis.db.postgres import connection
-from aegis.security.jwt_auth import create_token
+from aegis.security.jwt_auth import COOKIE_NAME, CSRF_COOKIE_NAME
 from aegis.security.passwords import hash_password
 
 _PW = "s3cret-pass-123"
@@ -57,23 +58,24 @@ def _mk_user(role: str) -> str:
 
 @pytest.fixture
 def admin_hdr() -> dict:
-    return {"Authorization": f"Bearer {create_token(_mk_user('admin'), 'admin')}"}
+    # ADR-015: auth via cookie httpOnly + header CSRF (cocok untuk GET maupun mutasi).
+    return auth_headers(_mk_user("admin"), "admin")
 
 
 @pytest.fixture
 def user_hdr() -> dict:
-    return {"Authorization": f"Bearer {create_token(_mk_user('user'), 'user')}"}
+    return auth_headers(_mk_user("user"), "user")
 
 
 # --- AC-ADMIN-03: role enforcement ---
 def test_role_enforcement(client, user_hdr) -> None:
-    assert client.get("/v1/admin/users").status_code == 401  # tanpa token
+    assert client.get("/v1/admin/users").status_code == 401  # tanpa cookie
     assert client.get("/v1/admin/users", headers=user_hdr).status_code == 403  # role user
 
 
 def test_stale_admin_token_uses_current_db_role_and_active(client) -> None:
     username = _mk_user("admin")
-    hdr = {"Authorization": f"Bearer {create_token(username, 'admin')}"}
+    hdr = auth_headers(username, "admin")
     assert client.get("/v1/admin/users", headers=hdr).status_code == 200
 
     with connection() as conn:
@@ -88,13 +90,42 @@ def test_stale_admin_token_uses_current_db_role_and_active(client) -> None:
     assert client.get("/v1/users/me", headers=hdr).status_code == 401
 
 
-# --- Auth ---
-def test_login(client) -> None:
+# --- Auth (ADR-015: cookie httpOnly + CSRF) ---
+def test_login_sets_httponly_cookie(client) -> None:
     username = _mk_user("admin")
     ok = client.post("/v1/auth/login", json={"username": username, "password": _PW})
-    assert ok.status_code == 200 and ok.json()["role"] == "admin" and ok.json()["jwt"]
+    # Body hanya role (BUKAN jwt); JWT dikirim via cookie httpOnly.
+    assert ok.status_code == 200 and ok.json() == {"role": "admin"}
+    assert "jwt" not in ok.json()
+    set_cookie = ok.headers.get("set-cookie", "")
+    assert COOKIE_NAME in set_cookie and "httponly" in set_cookie.lower()
+    assert CSRF_COOKIE_NAME in set_cookie  # cookie CSRF non-httpOnly juga di-set
+    # Cookie tersimpan di client → request berikut terautentikasi tanpa header.
+    assert client.get("/v1/users/me").json()["role"] == "admin"
     bad = client.post("/v1/auth/login", json={"username": username, "password": "wrong"})
     assert bad.status_code == 401
+
+
+def test_csrf_required_on_mutations(client) -> None:
+    """Mutasi cookie-auth tanpa header X-CSRF-Token → 403; GET tetap boleh (ADR-015)."""
+    cookies = auth_cookies_only(_mk_user("admin"), "admin")
+    # GET aman tanpa CSRF.
+    assert client.get("/v1/admin/users", headers=cookies).status_code == 200
+    # PUT /users/me tanpa CSRF → 403.
+    assert client.put("/v1/users/me", headers=cookies,
+                      json={"timezone": "Asia/Makassar"}).status_code == 403
+    # Mutasi admin tanpa CSRF → 403.
+    assert client.post("/v1/admin/users", headers=cookies,
+                       json={"username": "x", "password": _PW, "role": "user"}).status_code == 403
+    # logout tanpa CSRF → 403.
+    assert client.post("/v1/auth/logout", headers=cookies).status_code == 403
+
+
+def test_logout_clears_cookies(client, admin_hdr) -> None:
+    out = client.post("/v1/auth/logout", headers=admin_hdr)
+    assert out.status_code == 200
+    set_cookie = out.headers.get("set-cookie", "")
+    assert COOKIE_NAME in set_cookie  # delete_cookie → Set-Cookie dgn Max-Age=0/expires
 
 
 def test_users_me(client, admin_hdr) -> None:

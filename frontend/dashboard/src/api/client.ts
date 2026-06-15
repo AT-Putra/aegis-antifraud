@@ -1,21 +1,15 @@
-// Klien HTTP: Bearer JWT dari localStorage; 401 → buang token (logout) + event.
+// Klien HTTP (ADR-015): auth via cookie httpOnly `aegis_jwt` (dikirim otomatis dgn
+// credentials:"include"). Mutasi melampirkan header X-CSRF-Token dari cookie non-httpOnly
+// `aegis_csrf` (double-submit). 401 → event unauthorized (logout). Tak ada token di JS.
 import { apiBase } from "../config";
 
-const TOKEN_KEY = "aegis_jwt";
-const ROLE_KEY = "aegis_role";
+const CSRF_COOKIE = "aegis_csrf";
 
-export const tokenStore = {
-  get: () => localStorage.getItem(TOKEN_KEY),
-  role: () => localStorage.getItem(ROLE_KEY),
-  set: (jwt: string, role: string) => {
-    localStorage.setItem(TOKEN_KEY, jwt);
-    localStorage.setItem(ROLE_KEY, role);
-  },
-  clear: () => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(ROLE_KEY);
-  },
-};
+/** Baca cookie non-httpOnly (mis. aegis_csrf). null bila tak ada. */
+function readCookie(name: string): string | null {
+  const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return m ? decodeURIComponent(m[1]) : null;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -37,19 +31,24 @@ function qs(params?: Record<string, unknown>): string {
   return s ? `?${s}` : "";
 }
 
+const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
-  const token = tokenStore.get();
-  if (token) headers.Authorization = `Bearer ${token}`;
   if (body !== undefined) headers["Content-Type"] = "application/json";
+  // CSRF double-submit: pantulkan cookie aegis_csrf via header pada mutasi.
+  if (MUTATING.has(method)) {
+    const csrf = readCookie(CSRF_COOKIE);
+    if (csrf) headers["X-CSRF-Token"] = csrf;
+  }
 
   const resp = await fetch(`${apiBase()}${path}`, {
     method,
     headers,
+    credentials: "include", // kirim/terima cookie auth (same-origin via Caddy)
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (resp.status === 401) {
-    tokenStore.clear();
     window.dispatchEvent(new CustomEvent("aegis:unauthorized"));
     throw new ApiError(401, "unauthorized", "Sesi berakhir, masuk lagi.");
   }

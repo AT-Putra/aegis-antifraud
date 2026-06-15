@@ -7,10 +7,13 @@ import { server } from "./server";
 import { loginAs, renderApp } from "./utils";
 
 describe("AC-DASH-01 auth & role", () => {
-  it("login → simpan token & masuk dashboard", async () => {
+  it("login → set cookie (server) & masuk dashboard", async () => {
+    // ADR-015: body login hanya {role}; JWT via cookie httpOnly (di-set server, tak terbaca JS).
+    // Setelah login, /users/me harus mengembalikan sesi (role) — simulasikan sesi aktif.
     server.use(
-      http.post("http://localhost/v1/auth/login", () =>
-        HttpResponse.json({ jwt: "jwt-abc", role: "admin" }),
+      http.post("http://localhost/v1/auth/login", () => HttpResponse.json({ role: "admin" })),
+      http.get("http://localhost/v1/users/me", () =>
+        HttpResponse.json({ id: "u1", username: "admin", role: "admin", timezone: "Asia/Jakarta" }),
       ),
     );
     renderApp(["/login"]);
@@ -19,7 +22,6 @@ describe("AC-DASH-01 auth & role", () => {
     await userEvent.click(screen.getByRole("button", { name: "Masuk" }));
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Analitik" })).toBeInTheDocument());
-    expect(localStorage.getItem("aegis_jwt")).toBe("jwt-abc");
   });
 
   it("login gagal → tampilkan error, tetap di login", async () => {

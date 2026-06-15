@@ -14,12 +14,12 @@ from datetime import UTC, datetime
 import clickhouse_connect
 import psycopg
 import pytest
+from _authkit import auth_headers
 from fastapi.testclient import TestClient
 
 from aegis.config import get_settings
 from aegis.db.migrate import migrate_olap, migrate_oltp
 from aegis.security.hmac_auth import compute_signature
-from aegis.security.jwt_auth import create_token
 
 _TRAFFIC_COLS = [
     "trx_id", "device_id", "service", "source", "pub_id", "signals", "features",
@@ -70,7 +70,7 @@ def client():
 
 @pytest.fixture
 def auth() -> dict:
-    return {"Authorization": f"Bearer {create_token('tester', 'admin')}"}
+    return auth_headers("tester", "admin")
 
 
 def _signed(body: dict) -> tuple[str, dict]:

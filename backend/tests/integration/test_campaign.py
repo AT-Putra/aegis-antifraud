@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 import psycopg
 import pytest
+from _authkit import auth_headers
 from fastapi.testclient import TestClient
 
 from aegis.config import get_settings
@@ -20,7 +21,6 @@ from aegis.db.oltp import users_repo
 from aegis.db.postgres import connection
 from aegis.registry.service import register_service
 from aegis.security.hmac_auth import compute_signature
-from aegis.security.jwt_auth import create_token
 from aegis.security.passwords import hash_password
 
 _ORIGIN = "https://allowed.example"
@@ -66,7 +66,7 @@ def auth() -> dict:
         users_repo.insert_user(
             conn, username=username, password_hash=hash_password("x"), role="admin"
         )
-    return {"Authorization": f"Bearer {create_token(username, 'admin')}"}
+    return auth_headers(username, "admin")
 
 
 def _service() -> str:

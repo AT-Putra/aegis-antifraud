@@ -13,11 +13,11 @@ from datetime import datetime
 import clickhouse_connect
 import psycopg
 import pytest
+from _authkit import auth_headers
 from fastapi.testclient import TestClient
 
 from aegis.config import get_settings
 from aegis.db.migrate import migrate_olap, migrate_oltp
-from aegis.security.jwt_auth import create_token
 
 _TRAFFIC_COLS = [
     "trx_id", "device_id", "service", "source", "pub_id", "signals", "features",
@@ -68,7 +68,7 @@ def client():
 
 @pytest.fixture
 def auth() -> dict:
-    return {"Authorization": f"Bearer {create_token('tester', 'admin')}"}
+    return auth_headers("tester", "admin")
 
 
 def _features(**kw) -> dict:
@@ -154,6 +154,6 @@ def test_block_reasons_top_n(client, auth) -> None:
 
 
 def test_stats_accessible_to_user(client) -> None:
-    user = {"Authorization": f"Bearer {create_token('u', 'user')}"}
+    user = auth_headers("u", "user")
     assert client.get("/v1/analytics/block-reasons", headers=user).status_code == 200
     assert client.get("/v1/analytics/behavior-stats", headers=user).status_code == 200

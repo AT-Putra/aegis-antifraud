@@ -21,7 +21,7 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    jwt: str
+    # ADR-015: JWT dikirim via cookie httpOnly `aegis_jwt`, BUKAN di body. Body hanya role.
     role: Role
 
 
