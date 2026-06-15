@@ -4,6 +4,27 @@ import { useMemo, useState } from "react";
 // Ukuran halaman standar tabel admin (data bervolume kecil → semua client-side).
 export const ADMIN_PAGE_SIZE = 10;
 
+/**
+ * Bandingkan dua nilai sel untuk sort, arah ascending.
+ * - null/undefined **selalu** di akhir (lepas dari arah sort — penanganan di pemanggil).
+ * - dua angka dibanding numerik (hindari coercion `0 < ""` yang membuat null≈0).
+ * - selain itu leksikal (string, case-sensitive sesuai data).
+ * Return >0 berarti `a` setelah `b`; dipakai dgn flag `nullsLast` agar null tak ikut dibalik desc.
+ */
+export function compareValues(av: unknown, bv: unknown): { cmp: number; bothNull: boolean } {
+  const aNull = av == null;
+  const bNull = bv == null;
+  if (aNull && bNull) return { cmp: 0, bothNull: true };
+  if (aNull) return { cmp: 1, bothNull: false }; // a kosong → setelah b
+  if (bNull) return { cmp: -1, bothNull: false };
+  if (typeof av === "number" && typeof bv === "number") {
+    return { cmp: av - bv, bothNull: false };
+  }
+  const as = String(av);
+  const bs = String(bv);
+  return { cmp: as < bs ? -1 : as > bs ? 1 : 0, bothNull: false };
+}
+
 interface Options<T> {
   initialSort: DataTableSortStatus<T>;
   /** Kolom yang dicocokkan oleh quick filter teks (substring, case-insensitive). */
@@ -40,11 +61,13 @@ export function useClientTable<T>(rows: T[], opts: Options<T>) {
   const sorted = useMemo(() => {
     const key = sort.columnAccessor as keyof T;
     const copy = [...filtered];
+    const desc = sort.direction === "desc";
     copy.sort((a, b) => {
-      const av = a[key] ?? "";
-      const bv = b[key] ?? "";
-      const cmp = av < bv ? -1 : av > bv ? 1 : 0;
-      return sort.direction === "desc" ? -cmp : cmp;
+      const { cmp, bothNull } = compareValues(a[key], b[key]);
+      if (bothNull) return 0;
+      // Salah satu null → selalu di akhir; jangan ikut dibalik oleh desc.
+      if (a[key] == null || b[key] == null) return cmp;
+      return desc ? -cmp : cmp;
     });
     return copy;
   }, [filtered, sort]);
