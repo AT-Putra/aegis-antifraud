@@ -28,7 +28,7 @@ trap cleanup EXIT
 
 echo "[test] seed penanda PG+CH"
 "${PSQL[@]}" -d "$PG_DB" -c "INSERT INTO app_settings (key, value) VALUES ('$KEY','marker')" >/dev/null
-"${CHC[@]}" -d "$CH_DB" -q "INSERT INTO decision_log (trx_id, decision) VALUES ('$TRX','allow')"
+"${CHC[@]}" -d "$CH_DB" -q "INSERT INTO decision_log (trx_id, decision) VALUES ('$TRX','allow')" < /dev/null
 
 echo "[test] backup"
 TS="$(BACKUP_DIR=backups RETENTION_DAYS=7 bash scripts/backup.sh | tail -n1)"
