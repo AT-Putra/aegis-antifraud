@@ -29,6 +29,10 @@ done
 
 echo "[backup] ClickHouse data (Native) → ch_${TS}_<tabel>.native.gz"
 for t in $TABLES; do
+  # Lewati tabel kosong: dump Native 0-baris memicu NO_DATA_TO_INSERT (code 108) saat restore.
+  # Skema tetap di-dump (SHOW CREATE) → tabel kosong tetap dibuat ulang saat restore.
+  n="$("${CH[@]}" -q "SELECT count() FROM \`$t\`" | tr -d '[:space:]')"
+  [ "${n:-0}" -gt 0 ] || { echo "[backup] skip $t (0 baris)"; continue; }
   "${CH[@]}" -q "SELECT * FROM \`$t\` FORMAT Native" | gzip > "$BACKUP_DIR/ch_${TS}_${t}.native.gz"
 done
 
