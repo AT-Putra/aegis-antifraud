@@ -26,6 +26,38 @@ _UNKNOWN: dict = {
 _VPN_PROXY_TYPES = {"VPN", "TOR", "PUB", "WEB", "RES"}
 _DC_USAGE = {"DCH", "SES", "CDN"}
 
+# Operator seluler Indonesia (sinyal POSITIF pelanggan asli, ADR-009). IP2Proxy LITE
+# sering tak menandai usage_type=MOB untuk IP seluler asli → turunkan dari ASN/ISP
+# (MaxMind). ASN = definitif (global-unik); nama ISP = fallback (digate ke negara ID).
+_ID_MOBILE_ASNS = {
+    23693,  # Telkomsel (PT Telekomunikasi Selular)
+    4761,   # Indosat
+    4795,   # Indosat Mega Media (IM2)
+    24203,  # XL Axiata
+    45727,  # Hutchison 3 Indonesia (Tri)
+    24378,  # Smartfren (Smart Telecom)
+}
+_ID_MOBILE_NAME_HINTS = (
+    "telkomsel",
+    "telekomunikasi selular",
+    "indosat",
+    "xl axiata",
+    "excelcomindo",
+    "hutchison",
+    "smartfren",
+    "smart telecom",
+)
+
+
+def _is_id_mobile_carrier(asn: int | None, isp: str | None, country: str | None) -> bool:
+    """True bila IP milik operator seluler ID utama (Telkomsel/Indosat/XL/Tri/Smartfren)."""
+    if asn in _ID_MOBILE_ASNS:
+        return True
+    if country == "ID" and isp:
+        low = isp.lower()
+        return any(h in low for h in _ID_MOBILE_NAME_HINTS)
+    return False
+
 
 @lru_cache
 def _city_reader():
@@ -98,5 +130,12 @@ def enrich_ip(ip: str | None) -> dict:
             result["is_mobile_carrier"] = usage == "MOB"
         except Exception:
             pass
+
+    # Operator seluler ID (dari ASN/ISP MaxMind) → sinyal positif. Lengkapi bila
+    # IP2Proxy LITE tak menandai (usage_type kosong/"-" untuk IP seluler asli).
+    if _is_id_mobile_carrier(result["asn"], result["isp"], result["country"]):
+        result["is_mobile_carrier"] = True
+        if not result["connection_type"] or result["connection_type"] == "-":
+            result["connection_type"] = "MOB"
 
     return result
