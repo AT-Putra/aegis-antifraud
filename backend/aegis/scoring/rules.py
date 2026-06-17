@@ -18,13 +18,18 @@ _DEFAULT_HARD_RULES = (
 )
 
 # Faktor skor risiko kontinu: (nama_fitur, label, bobot). Sumber tunggal formula —
-# `rules_risk = min(1.0, Σ bobot·nilai)`. JANGAN duplikasi bobot di tempat lain.
+# `rules_risk = max(0.0, min(1.0, Σ bobot·nilai))`. Bobot positif = menaikkan risiko;
+# bobot negatif = pengurang. Operator seluler ID (sinyal POSITIF pelanggan asli) diberi
+# pengurang BERNILAI MINIMUM (-0.05) — hanya menggeser kasus borderline; tak menyelamatkan
+# bot ber-automasi (hard-rule tetap blok instan) maupun skor jelas-tinggi (tetap > ambang).
+# JANGAN duplikasi bobot di tempat lain.
 SOFT_FACTORS: tuple[tuple[str, str, float], ...] = (
     ("automation_score", "Skor automasi", 0.2),
     ("webview_risk", "Risiko WebView", 0.3),
     ("ip_is_datacenter", "IP datacenter", 0.3),
     ("ip_is_vpn_proxy_tor", "IP VPN/Proxy/Tor", 0.2),
     ("no_behavior", "Tanpa interaksi", 0.2),
+    ("ip_is_mobile_carrier", "Operator seluler (pengurang)", -0.05),
 )
 
 # Spesifikasi hard-rule: nama → (fitur, predikat). Predikat True → rule terpicu.
@@ -62,7 +67,7 @@ def _hard_triggers(features: dict, enabled: set[str]) -> list[str]:
 def soft_score(features: dict) -> float:
     """Skor risiko kontinu (formula tertimbang, clamp ke [0,1])."""
     total = sum(w * features.get(feat, 0.0) for feat, _label, w in SOFT_FACTORS)
-    return min(1.0, total)
+    return max(0.0, min(1.0, total))  # clamp bawah: pengurang tak bikin skor negatif
 
 
 def evaluate_rules(features: dict, params: dict | None = None) -> RuleResult:

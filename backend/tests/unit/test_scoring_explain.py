@@ -13,6 +13,7 @@ from aegis.scoring.explain import (
     explain_blend,
     explain_rules,
 )
+from aegis.scoring.rules import evaluate_rules, soft_score
 
 
 def test_soft_formula_score_half() -> None:
@@ -112,3 +113,31 @@ def test_build_full_object_shape() -> None:
     assert obj["rules_version_used"] == 1
     assert obj["models"]["attribution_available"] is False
     assert "rules" in obj and "blend" in obj and obj["rationale"]
+
+
+# --- Pengurang risiko operator seluler ID (nilai minimum -0.05) ---
+
+
+def test_mobile_carrier_discounts_soft_score() -> None:
+    # no_behavior=1.0 (×0.2)=0.2; + operator seluler (-0.05) = 0.15.
+    assert soft_score({"no_behavior": 1.0}) == 0.2
+    assert abs(soft_score({"no_behavior": 1.0, "ip_is_mobile_carrier": 1.0}) - 0.15) < 1e-9
+
+
+def test_mobile_carrier_clamped_non_negative() -> None:
+    # Hanya operator seluler tanpa risiko lain → skor tak boleh negatif.
+    assert soft_score({"ip_is_mobile_carrier": 1.0}) == 0.0
+
+
+def test_mobile_carrier_does_not_rescue_hard_block() -> None:
+    # Bot ber-automasi di IP seluler tetap hard-block (pengaman).
+    rr = evaluate_rules({"auto_webdriver": 1.0, "ip_is_mobile_carrier": 1.0})
+    assert rr.hard_block is True
+    assert "webdriver" in rr.triggered
+
+
+def test_mobile_carrier_factor_in_explain() -> None:
+    exp = explain_rules({"no_behavior": 1.0, "ip_is_mobile_carrier": 1.0})
+    contrib = {f["name"]: f["contribution"] for f in exp["factors"]}
+    assert abs(contrib["ip_is_mobile_carrier"] - (-0.05)) < 1e-9
+    assert abs(exp["soft_score"] - 0.15) < 1e-9
