@@ -60,7 +60,8 @@ describe("AC-DASH-03 manajemen", () => {
     await userEvent.type(await screen.findByLabelText("Slug"), "promo");
     await userEvent.type(screen.getByLabelText("Nama"), "Promo");
     // Service kini dropdown searchable (bukan free-text): buka & pilih opsi.
-    await userEvent.click(screen.getByRole("textbox", { name: "Service (slug)" }));
+    // Mantine 9: input Select searchable kini role="combobox" (sebelumnya "textbox").
+    await userEvent.click(screen.getByRole("combobox", { name: "Service (slug)" }));
     await userEvent.click(await screen.findByText("Service A (svc-a)"));
     await userEvent.type(screen.getByLabelText("Allowed origins (satu per baris)"), "https://ext.example");
     await userEvent.click(screen.getByRole("button", { name: "Simpan" }));

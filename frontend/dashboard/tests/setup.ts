@@ -61,6 +61,15 @@ class ResizeObserverStub {
 (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverStub;
 Element.prototype.scrollIntoView = () => {};
 
+// jsdom tak mengimplementasikan FontFaceSet (`document.fonts`); Mantine 9 Textarea
+// autosize memanggil `document.fonts.addEventListener("loadingdone", …)` → stub-kan.
+if (!document.fonts) {
+  Object.defineProperty(document, "fonts", {
+    writable: true,
+    value: { addEventListener: () => {}, removeEventListener: () => {}, ready: Promise.resolve() },
+  });
+}
+
 // ADR-015: bersihkan cookie (mis. aegis_csrf dari loginAs) agar tak bocor antar-test.
 function clearCookies(): void {
   for (const c of document.cookie.split(";")) {

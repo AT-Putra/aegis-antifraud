@@ -73,7 +73,8 @@ await ctx.addInitScript(() => {
 // intercept semua /v1/* dengan data mock
 await ctx.route("**/v1/**", (route) => {
   const url = route.request().url();
-  if (/\/v1\/auth\/me$/.test(url)) return route.fulfill({ json: { username: "admin", role: "admin", tz: "Asia/Jakarta" } });
+  // ADR-015: sesi via cookie httpOnly → AuthContext bootstrap lewat GET /v1/users/me (bukan /auth/me).
+  if (/\/v1\/users\/me$/.test(url)) return route.fulfill({ json: { username: "admin", role: "admin", tz: "Asia/Jakarta" } });
   const hit = routes.find((r) => r.re.test(url));
   return route.fulfill({ json: hit ? hit.body : [] });
 });
