@@ -75,13 +75,23 @@ def _service() -> str:
     return slug
 
 
-def _create_campaign(client, auth, service, origins=None) -> tuple[str, str]:
+def _create_campaign(client, auth, service, origins=None, countries=None) -> tuple[str, str]:
     slug = f"camp-{uuid.uuid4().hex[:10]}"
     r = client.post("/v1/admin/campaigns", headers=auth, json={
-        "slug": slug, "name": "Camp", "service": service, "allowed_origins": origins or [],
+        "slug": slug, "name": "Camp", "service": service,
+        "allowed_origins": origins or [], "allowed_countries": countries or [],
     })
     assert r.status_code == 200, r.text
     return slug, r.json()["id"]
+
+
+# enrich_ip(...) shape; override `country` untuk uji geo-gate tanpa bergantung GeoIP DB.
+def _ip_intel(country):
+    return {
+        "country": country, "asn": None, "isp": None, "connection_type": None,
+        "proxy_type": None, "is_datacenter": False, "vpn_proxy_tor": False,
+        "is_mobile_carrier": False, "ip_reputation": None,
+    }
 
 
 # --- AC-CAMPAIGN-01: registry & validasi ---
@@ -154,6 +164,67 @@ def test_campaign_cors(client, auth) -> None:
     }
     score_missing = client.post("/v1/score", json=score_body)
     assert score_missing.status_code == 403 and score_missing.json()["code"] == "forbidden_origin"
+
+
+# --- AC-CAMPAIGN-04: geo-allowlist per campaign (F-17) ---
+def test_campaign_geo_validation(client, auth) -> None:
+    svc = _service()
+    # kode negara ngawur → 400 invalid_campaign
+    bad = client.post("/v1/admin/campaigns", headers=auth, json={
+        "slug": f"c-{uuid.uuid4().hex[:8]}", "name": "X", "service": svc,
+        "allowed_origins": [], "allowed_countries": ["ID", "ZZ"],
+    })
+    assert bad.status_code == 400 and bad.json()["code"] == "invalid_campaign"
+
+    # normalisasi: lowercase + dedupe → tersimpan uppercase unik
+    slug, cid = _create_campaign(client, auth, svc, countries=["id", "ID", "my"])
+    item = next(c for c in client.get("/v1/admin/campaigns", headers=auth).json() if c["id"] == cid)
+    assert sorted(item["allowed_countries"]) == ["ID", "MY"]
+
+
+def _score_flow(client, monkeypatch, svc, slug, country):
+    """Jalankan session/init + score utk campaign tsb; enrich_ip dipaksa `country`."""
+    monkeypatch.setattr(
+        "aegis.api.scoring.mint_weboptin_url",
+        lambda *a, **k: MintResult("minted", redirect_url="https://t/x?token=1", host="t"),
+    )
+    monkeypatch.setattr("aegis.api.scoring.enrich_ip", lambda ip: _ip_intel(country))
+    trx = f"trx-{uuid.uuid4().hex[:10]}"
+    tok = client.post("/v1/session/init", headers={"Origin": _ORIGIN}, json={
+        "trx_id": trx, "service": svc, "campaign": slug,
+    }).json()["session_token"]
+    return trx, client.post("/v1/score", headers={"Origin": _ORIGIN}, json={
+        "trx_id": trx, "service": svc, "campaign": slug, "session_token": tok,
+        "schema_version": "1.0", "source": "fb", "pub_id": "1", "signals": _HUMAN,
+    })
+
+
+def test_campaign_geo_allow_listed_country(client, auth, monkeypatch) -> None:
+    svc = _service()
+    slug, _ = _create_campaign(client, auth, svc, [_ORIGIN], countries=["ID", "MY"])
+    _trx, r = _score_flow(client, monkeypatch, svc, slug, "ID")
+    assert r.status_code == 200 and r.json()["decision"] == "allow"
+
+
+def test_campaign_geo_block_unlisted_country(client, auth, monkeypatch) -> None:
+    svc = _service()
+    slug, _ = _create_campaign(client, auth, svc, [_ORIGIN], countries=["ID"])
+    _trx, r = _score_flow(client, monkeypatch, svc, slug, "US")
+    assert r.status_code == 200 and r.json()["decision"] == "block"
+
+
+def test_campaign_geo_block_unknown_country_fail_closed(client, auth, monkeypatch) -> None:
+    svc = _service()
+    slug, _ = _create_campaign(client, auth, svc, [_ORIGIN], countries=["ID"])
+    _trx, r = _score_flow(client, monkeypatch, svc, slug, None)  # GeoIP gagal → None
+    assert r.status_code == 200 and r.json()["decision"] == "block"
+
+
+def test_campaign_geo_all_allows_any_country(client, auth, monkeypatch) -> None:
+    svc = _service()
+    slug, _ = _create_campaign(client, auth, svc, [_ORIGIN])  # allowed_countries=[] = ALL
+    _trx, r = _score_flow(client, monkeypatch, svc, slug, "US")
+    assert r.status_code == 200 and r.json()["decision"] == "allow"
 
 
 # --- AC-CAMPAIGN-03: atribusi & fraud_est (Opsi B, berjenjang) ---

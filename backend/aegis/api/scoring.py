@@ -15,12 +15,12 @@ from aegis.db.postgres import connection
 from aegis.features.device_info import parse_device_info
 from aegis.features.extract import extract_features
 from aegis.features.ip_intel import enrich_ip
-from aegis.features.schema import FeatureInput
+from aegis.features.schema import FEATURE_VERSION, FeatureInput
 from aegis.fingerprint.service import lookup_or_register
 from aegis.registry.campaign import get_active_campaign
 from aegis.registry.service import get_active_service, get_service_secret
 from aegis.schemas.scoring import ScoreRequest, SessionInitRequest
-from aegis.scoring.engine import score
+from aegis.scoring.engine import ScoreOutcome, score
 from aegis.security import ratelimit
 from aegis.security.tokens import SessionTokenError, issue, verify_and_consume
 
@@ -81,6 +81,17 @@ def _block():
     return {"decision": "block", "notice": "Permintaan tidak dapat diproses."}
 
 
+def _country_allowed(camp, country: str | None) -> bool:
+    """Geo-gate per-campaign (F-17). allowed_countries kosong = ALL (tanpa batas).
+
+    Fail-closed: bila allowlist diset namun negara tak diketahui (GeoIP absen / IP
+    privat / lookup gagal → country None) → tidak diizinkan (blok).
+    """
+    if not camp.allowed_countries:
+        return True
+    return country in camp.allowed_countries
+
+
 @router.post("/score")
 def score_endpoint(req: ScoreRequest, request: Request):
     ip = client_ip(request) or "unknown"
@@ -118,9 +129,18 @@ def score_endpoint(req: ScoreRequest, request: Request):
     cfg = request.app.state.config
     if cfg is None:
         return err(503, "not_ready", "konfigurasi scoring belum siap")
-    _t = time.perf_counter()
-    outcome = score(feature_input, config=cfg, models=request.app.state.models)
-    metrics.score_latency.observe(time.perf_counter() - _t)
+    if not _country_allowed(camp, ip_intel["country"]):
+        # Geo-gate hard-block (F-17): lewati model, tetap dicatat sbg keputusan block.
+        outcome = ScoreOutcome(
+            decision="block", final_score=1.0, threshold_used=cfg.threshold,
+            rules_version=cfg.version, model_version=cfg.model_version,
+            feature_version=FEATURE_VERSION, reason="rule:country_not_allowed",
+            score_breakdown={"rules": None, "isolation_forest": None, "lightgbm": None},
+        )
+    else:
+        _t = time.perf_counter()
+        outcome = score(feature_input, config=cfg, models=request.app.state.models)
+        metrics.score_latency.observe(time.perf_counter() - _t)
     metrics.decisions.labels(outcome.decision).inc()
     metrics.final_score.observe(outcome.final_score)
 

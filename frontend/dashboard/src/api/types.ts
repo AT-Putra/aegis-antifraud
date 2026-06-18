@@ -162,6 +162,7 @@ export interface CampaignOut {
   name: string;
   service: string;
   allowed_origins: string[];
+  allowed_countries: string[]; // ISO 3166-1 alpha-2; [] = ALL (tanpa batas geo). F-17
   status: "active" | "inactive";
   created_at: string;
   updated_at: string;

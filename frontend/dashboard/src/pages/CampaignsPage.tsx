@@ -1,14 +1,26 @@
-import { Badge, Button, Group, Modal, Select, Stack, Textarea, TextInput } from "@mantine/core";
+import {
+  Badge,
+  Button,
+  Group,
+  Modal,
+  MultiSelect,
+  Select,
+  Stack,
+  Textarea,
+  TextInput,
+} from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconPlus } from "@tabler/icons-react";
 import { DataTable } from "mantine-datatable";
 import { useState } from "react";
 
-import type { CampaignOut } from "../api/types";
+import type { CampaignOut, RegistryOption } from "../api/types";
 import { PageHeader } from "../components/PageHeader";
 import { QuickFilter } from "../components/QuickFilter";
 import { useClientTable } from "../lib/clientTable";
+import { COUNTRY_OPTIONS } from "../lib/countries";
 import { useCampaigns, useSaveCampaign } from "../hooks/admin";
+import { useServiceOptions } from "../hooks/queries";
 
 interface Draft {
   id?: string;
@@ -16,16 +28,39 @@ interface Draft {
   name: string;
   service: string;
   origins: string; // satu origin per baris
+  countries: string[]; // kode ISO alpha-2, atau ["ALL"] = tanpa batas geo (F-17)
   status: "active" | "inactive";
 }
-const EMPTY: Draft = { slug: "", name: "", service: "", origins: "", status: "active" };
+const ALL = "ALL";
+const EMPTY: Draft = {
+  slug: "", name: "", service: "", origins: "", countries: [ALL], status: "active",
+};
+
+// ALL + daftar negara. ALL = pilihan eksplisit "tanpa batas" (disimpan sbg [] di backend).
+const COUNTRY_DATA = [
+  { value: ALL, label: "ALL — semua negara (tanpa batas)" },
+  ...COUNTRY_OPTIONS,
+];
 
 function parseOrigins(s: string): string[] {
   return s.split("\n").map((x) => x.trim()).filter(Boolean);
 }
 
+// allowed_countries backend ([] = ALL) → state form (["ALL"] = ALL, mandatory non-kosong).
+function toDraftCountries(codes: string[]): string[] {
+  return codes.length === 0 ? [ALL] : codes;
+}
+
+function serviceData(opts: RegistryOption[] | undefined) {
+  return (opts ?? []).map((o) => ({
+    value: o.slug,
+    label: o.status === "active" ? `${o.name} (${o.slug})` : `${o.name} (${o.slug}) — nonaktif`,
+  }));
+}
+
 export function CampaignsPage() {
   const list = useCampaigns();
+  const services = useServiceOptions();
   const save = useSaveCampaign();
   const [opened, { open, close }] = useDisclosure(false);
   const [d, setD] = useState<Draft>(EMPTY);
@@ -41,13 +76,31 @@ export function CampaignsPage() {
     open();
   };
   const startEdit = (c: CampaignOut) => {
-    setD({ id: c.id, slug: c.slug, name: c.name, service: c.service, origins: (c.allowed_origins ?? []).join("\n"), status: c.status });
+    setD({
+      id: c.id, slug: c.slug, name: c.name, service: c.service,
+      origins: (c.allowed_origins ?? []).join("\n"),
+      countries: toDraftCountries(c.allowed_countries ?? []),
+      status: c.status,
+    });
     open();
   };
+
+  // ALL ⇄ negara: kosong → kembali ke ALL (mandatory); pilih ALL → reset ke ALL saja;
+  // pilih negara saat ALL aktif → buang ALL.
+  const onCountries = (vals: string[]) => {
+    let next: string[];
+    if (vals.length === 0) next = [ALL];
+    else if (vals.includes(ALL) && !d.countries.includes(ALL)) next = [ALL];
+    else if (vals.includes(ALL) && vals.length > 1) next = vals.filter((v) => v !== ALL);
+    else next = vals;
+    setD({ ...d, countries: next });
+  };
+
   const submit = () => {
+    const countries = d.countries.includes(ALL) ? [] : d.countries; // ["ALL"] → [] (= ALL)
     const body: Record<string, unknown> = editing
-      ? { name: d.name, allowed_origins: parseOrigins(d.origins), status: d.status }
-      : { slug: d.slug, name: d.name, service: d.service, allowed_origins: parseOrigins(d.origins) };
+      ? { name: d.name, allowed_origins: parseOrigins(d.origins), allowed_countries: countries, status: d.status }
+      : { slug: d.slug, name: d.name, service: d.service, allowed_origins: parseOrigins(d.origins), allowed_countries: countries };
     save.mutate({ id: d.id, body }, { onSuccess: close });
   };
 
@@ -96,6 +149,18 @@ export function CampaignsPage() {
             ),
           },
           {
+            accessor: "allowed_countries",
+            title: "negara",
+            render: (c) =>
+              (c.allowed_countries ?? []).length === 0 ? (
+                <Badge variant="light" color="teal">ALL</Badge>
+              ) : (
+                <Badge variant="light" color="blue">
+                  {(c.allowed_countries ?? []).length} negara
+                </Badge>
+              ),
+          },
+          {
             accessor: "status",
             sortable: true,
             render: (c) => (
@@ -121,8 +186,29 @@ export function CampaignsPage() {
         <Stack>
           <TextInput label="Slug" value={d.slug} disabled={editing} onChange={(e) => setD({ ...d, slug: e.currentTarget.value })} />
           <TextInput label="Nama" value={d.name} onChange={(e) => setD({ ...d, name: e.currentTarget.value })} />
-          <TextInput label="Service (slug)" value={d.service} disabled={editing} onChange={(e) => setD({ ...d, service: e.currentTarget.value })} />
+          <Select
+            label="Service (slug)"
+            placeholder={services.isLoading ? "memuat…" : "pilih service"}
+            data={serviceData(services.data)}
+            value={d.service || null}
+            onChange={(v) => setD({ ...d, service: v ?? "" })}
+            searchable
+            disabled={editing}
+            nothingFoundMessage="Tidak ada service"
+          />
           <Textarea label="Allowed origins (satu per baris)" autosize minRows={2} value={d.origins} onChange={(e) => setD({ ...d, origins: e.currentTarget.value })} />
+          <MultiSelect
+            label="Negara diizinkan (web-opt-in)"
+            description="ALL = semua negara (tanpa batas). Pilih satu/lebih negara untuk membatasi akses ke negara tsb."
+            placeholder="Cari negara…"
+            data={COUNTRY_DATA}
+            value={d.countries}
+            onChange={onCountries}
+            searchable
+            hidePickedOptions
+            nothingFoundMessage="Negara tidak ditemukan"
+            maxDropdownHeight={260}
+          />
           {editing && (
             <Select label="Status" data={["active", "inactive"]} value={d.status} onChange={(v) => setD({ ...d, status: (v as "active" | "inactive") ?? "active" })} />
           )}

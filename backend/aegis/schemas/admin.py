@@ -156,12 +156,15 @@ class ServiceUpdate(BaseModel):
 
 
 # --- Campaign registry (pre-landing portabel; F-16) ---
+# allowed_countries (F-17): whitelist negara ISO 3166-1 alpha-2 utk web-opt-in.
+# [] = ALL (tanpa batas). Geo-gate fail-closed: negara tak diketahui → blok.
 class CampaignOut(BaseModel):
     id: UUID
     slug: str
     name: str
     service: str
     allowed_origins: list[str] = []
+    allowed_countries: list[str] = []
     status: Literal["active", "inactive"]
     created_at: datetime
     updated_at: datetime
@@ -173,10 +176,12 @@ class CampaignCreate(BaseModel):
     name: str
     service: str = Field(pattern=SLUG_PATTERN)
     allowed_origins: list[str] = []
+    allowed_countries: list[str] = []
 
 
 class CampaignUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str | None = None
     allowed_origins: list[str] | None = None
+    allowed_countries: list[str] | None = None
     status: Literal["active", "inactive"] | None = None

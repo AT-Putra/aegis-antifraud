@@ -42,10 +42,13 @@ describe("AC-DASH-03 manajemen", () => {
     await waitFor(() => expect(posted).toMatchObject({ slug: "svc-b", hmac_secret: "rahasia" }));
   });
 
-  it("campaign: create dengan allowed_origins", async () => {
+  it("campaign: create dengan service dropdown + geo-allowlist default ALL", async () => {
     loginAs("admin");
     let posted: Record<string, unknown> | null = null;
     server.use(
+      http.get(`${B}/v1/registry/services`, () =>
+        HttpResponse.json([{ slug: "svc-a", name: "Service A", status: "active" }]),
+      ),
       http.get(`${B}/v1/admin/campaigns`, () => HttpResponse.json([])),
       http.post(`${B}/v1/admin/campaigns`, async ({ request }) => {
         posted = (await request.json()) as Record<string, unknown>;
@@ -56,11 +59,17 @@ describe("AC-DASH-03 manajemen", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Tambah" }));
     await userEvent.type(await screen.findByLabelText("Slug"), "promo");
     await userEvent.type(screen.getByLabelText("Nama"), "Promo");
-    await userEvent.type(screen.getByLabelText("Service (slug)"), "svc-a");
+    // Service kini dropdown searchable (bukan free-text): buka & pilih opsi.
+    await userEvent.click(screen.getByRole("textbox", { name: "Service (slug)" }));
+    await userEvent.click(await screen.findByText("Service A (svc-a)"));
     await userEvent.type(screen.getByLabelText("Allowed origins (satu per baris)"), "https://ext.example");
     await userEvent.click(screen.getByRole("button", { name: "Simpan" }));
+    // Geo default ALL → allowed_countries dikirim sbg [] (tanpa batas).
     await waitFor(() =>
-      expect(posted).toMatchObject({ slug: "promo", service: "svc-a", allowed_origins: ["https://ext.example"] }),
+      expect(posted).toMatchObject({
+        slug: "promo", service: "svc-a",
+        allowed_origins: ["https://ext.example"], allowed_countries: [],
+      }),
     );
   });
 

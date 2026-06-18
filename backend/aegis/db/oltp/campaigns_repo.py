@@ -7,8 +7,8 @@ from psycopg.rows import dict_row
 
 # Kolom publik (join slug service utk tampilan/atribusi).
 _PUBLIC = (
-    "c.id, c.slug, c.name, s.slug AS service, c.allowed_origins, c.status, "
-    "c.created_at, c.updated_at"
+    "c.id, c.slug, c.name, s.slug AS service, c.allowed_origins, c.allowed_countries, "
+    "c.status, c.created_at, c.updated_at"
 )
 _FROM = "FROM campaigns c JOIN services s ON s.id = c.service_id"
 
@@ -20,12 +20,13 @@ def insert_campaign(
     name: str,
     service_id: str,
     allowed_origins: list[str],
+    allowed_countries: list[str],
 ) -> str:
     with conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO campaigns (slug, name, service_id, allowed_origins) "
-            "VALUES (%s, %s, %s::uuid, %s) RETURNING id",
-            (slug, name, service_id, allowed_origins),
+            "INSERT INTO campaigns (slug, name, service_id, allowed_origins, allowed_countries) "
+            "VALUES (%s, %s, %s::uuid, %s, %s) RETURNING id",
+            (slug, name, service_id, allowed_origins, allowed_countries),
         )
         return str(cur.fetchone()[0])
 
@@ -69,6 +70,7 @@ def update_campaign(
     *,
     name: str | None = None,
     allowed_origins: list[str] | None = None,
+    allowed_countries: list[str] | None = None,
     status: str | None = None,
 ) -> dict | None:
     sets: list[str] = []
@@ -76,6 +78,7 @@ def update_campaign(
     for col, val in (
         ("name", name),
         ("allowed_origins", allowed_origins),
+        ("allowed_countries", allowed_countries),
         ("status", status),
     ):
         if val is not None:
