@@ -59,6 +59,51 @@ def _is_id_mobile_carrier(asn: int | None, isp: str | None, country: str | None)
     return False
 
 
+# Penyedia hosting/cloud/VPS (sinyal is_datacenter, ADR-009). IP2Proxy LITE sering TAK
+# menandai usage_type=DCH untuk range hosting (mis. Hetzner 159.69.x) → turunkan dari
+# ASN/ISP (MaxMind). ASN = definitif; nama ISP = fallback. Datacenter ≠ VPN/Proxy/Tor
+# (anonimisasi) → hanya is_datacenter yang diset. Bobot soft 0.3 (rules.py), bukan
+# hard-block → false-positive aman.
+_DATACENTER_ASNS = {
+    24940, 213230,          # Hetzner Online GmbH
+    16276,                  # OVH SAS
+    14061,                  # DigitalOcean LLC
+    16509, 14618, 8987,     # Amazon AWS (EC2/AES/EU)
+    396982, 15169,          # Google Cloud / Google LLC
+    8075, 8068,             # Microsoft (Azure)
+    63949,                  # Akamai/Linode
+    20473,                  # Vultr (The Constant Company/Choopa)
+    51167,                  # Contabo GmbH
+    60781, 16265,           # Leaseweb
+    45102, 37963,           # Alibaba Cloud
+    132203, 45090,          # Tencent Cloud
+    31898,                  # Oracle Cloud
+    12876,                  # Scaleway / Online SAS
+    197540,                 # netcup GmbH
+    9009,                   # M247
+    206092,                 # IP Volume / hosting
+    51852,                  # Private Layer
+    49981,                  # WorldStream
+}
+_DATACENTER_NAME_HINTS = (
+    "hetzner", "ovh", "digitalocean", "digital ocean", "amazon", "aws", "google",
+    "microsoft", "azure", "linode", "akamai", "vultr", "choopa", "contabo", "leaseweb",
+    "alibaba", "tencent", "oracle", "scaleway", "netcup", "m247", "g-core", "gcore",
+    "datacamp", "ionos", "1&1", "hostwinds", "colocrossing", "worldstream", "datacenter",
+    "data center", "hosting", "server", "vps", "cloud",
+)
+
+
+def _is_datacenter_provider(asn: int | None, isp: str | None) -> bool:
+    """True bila IP milik penyedia hosting/cloud/VPS (datacenter) terkenal."""
+    if asn in _DATACENTER_ASNS:
+        return True
+    if isp:
+        low = isp.lower()
+        return any(h in low for h in _DATACENTER_NAME_HINTS)
+    return False
+
+
 @lru_cache
 def _city_reader():
     try:
@@ -137,5 +182,12 @@ def enrich_ip(ip: str | None) -> dict:
         result["is_mobile_carrier"] = True
         if not result["connection_type"] or result["connection_type"] == "-":
             result["connection_type"] = "MOB"
+
+    # Datacenter/hosting (dari ASN/ISP MaxMind) → sinyal risiko. Lengkapi bila IP2Proxy
+    # LITE tak menandai DCH (mis. Hetzner/OVH/cloud). Hanya is_datacenter (bukan vpn).
+    elif _is_datacenter_provider(result["asn"], result["isp"]):
+        result["is_datacenter"] = True
+        if not result["connection_type"] or result["connection_type"] == "-":
+            result["connection_type"] = "DCH"
 
     return result
