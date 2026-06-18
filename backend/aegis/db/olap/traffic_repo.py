@@ -24,6 +24,10 @@ def _get_client(s: Settings):
             username=s.clickhouse_user,
             password=s.clickhouse_password,
             database=s.clickhouse_db,
+            # Insert konkuren dari banyak request scoring berbagi klien singleton ini →
+            # matikan session id agar tak kena kunci "concurrent queries within the same
+            # session" (lihat analytics_repo). Insert async tetap berfungsi.
+            autogenerate_session_id=False,
         )
     return _client
 

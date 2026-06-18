@@ -56,6 +56,12 @@ def _get_client(s: Settings):
             username=s.clickhouse_user,
             password=s.clickhouse_password,
             database=s.clickhouse_db,
+            # Endpoint sync FastAPI jalan di thread-pool → dashboard menembak banyak query
+            # analitik paralel pada satu klien bersama. Session ClickHouse melarang query
+            # konkuren dalam satu session ("Attempt to execute concurrent queries within the
+            # same session"). Query kita murni agregasi stateless → matikan session id agar
+            # tiap query = request HTTP independen (aman konkuren).
+            autogenerate_session_id=False,
         )
     return _client
 
