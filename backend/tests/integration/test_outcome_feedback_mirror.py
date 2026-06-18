@@ -81,10 +81,10 @@ def _signed(body: dict) -> tuple[str, dict]:
                  "content-type": "application/json"}
 
 
-def _traffic_row(*, trx, service, decision, ts, campaign="") -> list:
+def _traffic_row(*, trx, service, decision, ts, campaign="", country="ID") -> list:
     return [
         trx, "dev-x", service, "fb", "1", json.dumps({}), json.dumps({"automation_score": 0.1}),
-        "ID", 12345, "ISP", "mobile", 0, "clean", decision, 0.2, "minted", "Chrome", "Android",
+        country, 12345, "ISP", "mobile", 0, "clean", decision, 0.2, "minted", "Chrome", "Android",
         "mobile", "Samsung", "SM", 0, json.dumps({"rules": 0.1}), ts, campaign,
     ]
 
@@ -155,6 +155,58 @@ def test_charging_breakdown_and_search_filter_from_olap(client, auth) -> None:
     res = client.get("/v1/analytics/search",
                      params={**q, "charging_status": "failed"}, headers=auth).json()
     assert any(row["trx_id"] == trx for row in res)
+
+
+def test_countries_endpoint(client, auth) -> None:
+    """GET /v1/analytics/countries (T-27): distinct ip_country dari OLAP, terurut, non-kosong."""
+    ch = _ch()
+    if ch is None:
+        pytest.skip("ClickHouse tak terjangkau")
+    svc = f"ctry-{uuid.uuid4().hex[:8]}"
+    ts = datetime(2032, 5, 1, 6, 0, 0)
+    ch.insert("traffic_events", [
+        _traffic_row(trx=f"{svc}-my", service=svc, decision="allow", ts=ts, country="MY"),
+    ], column_names=_TRAFFIC_COLS)
+    res = client.get("/v1/analytics/countries", headers=auth).json()
+    assert "MY" in res
+    assert all(isinstance(c, str) and c for c in res)
+    assert res == sorted(res)  # terurut alfabetis
+
+
+def test_search_subscription_cascade_filters(client, auth) -> None:
+    """Filter outcome langganan berjenjang (T-27): subscribed→charging_status→charging_fail_reason."""
+    ch = _ch()
+    if ch is None:
+        pytest.skip("ClickHouse tak terjangkau")
+    svc = f"sub-{uuid.uuid4().hex[:8]}"
+    ts = datetime(2032, 6, 1, 6, 0, 0)
+    trx_ok = f"{svc}-ok"        # langganan, charging success
+    trx_insf = f"{svc}-insf"    # langganan, gagal insufficient_balance
+    trx_other = f"{svc}-other"  # langganan, gagal tanpa reason (lainnya)
+    trx_nosub = f"{svc}-nosub"  # tanpa outcome langganan
+    ch.insert("traffic_events", [
+        _traffic_row(trx=t, service=svc, decision="allow", ts=ts)
+        for t in (trx_ok, trx_insf, trx_other, trx_nosub)
+    ], column_names=_TRAFFIC_COLS)
+    ch.insert("outcome_log", [
+        [trx_ok, "subscription", "success", "", ts],
+        [trx_insf, "subscription", "failed", "insufficient_balance", ts],
+        [trx_other, "subscription", "failed", "", ts],
+    ], column_names=["trx_id", "callback_type", "charging_status",
+                     "charging_fail_reason", "received_at"])
+
+    q = {"from": "2032-06-01T00:00:00", "to": "2032-06-02T00:00:00", "service": svc}
+
+    def ids(**extra):
+        r = client.get("/v1/analytics/search", params={**q, **extra}, headers=auth).json()
+        return {row["trx_id"] for row in r}
+
+    assert ids() == {trx_ok, trx_insf, trx_other, trx_nosub}            # tanpa filter
+    assert ids(subscribed="true") == {trx_ok, trx_insf, trx_other}      # punya outcome langganan
+    assert ids(charging_status="failed") == {trx_insf, trx_other}       # charging gagal
+    assert ids(charging_fail_reason="insufficient_balance") == {trx_insf}
+    assert ids(charging_fail_reason="daily_limit_reached") == set()     # tak ada
+    assert ids(charging_fail_reason="other") == {trx_other}             # gagal tanpa reason
 
 
 def test_feedback_review_mirrors_and_fraud_est(client, auth) -> None:

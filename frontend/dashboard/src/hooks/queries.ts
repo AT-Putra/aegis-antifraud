@@ -94,3 +94,11 @@ export const useCampaignOptions = (service?: string | null) =>
     enabled: !!service,
     staleTime: 5 * 60_000,
   });
+
+// Opsi negara untuk dropdown filter Pencarian (distinct dari OLAP; T-27).
+export const useCountryOptions = () =>
+  useQuery({
+    queryKey: ["analytics-countries"],
+    queryFn: () => api.get<string[]>("/v1/analytics/countries"),
+    staleTime: 5 * 60_000,
+  });

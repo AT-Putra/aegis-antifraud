@@ -17,6 +17,11 @@
 		}
 	}
 
+	# /dashboard (tanpa slash) → /dashboard/ (T-27): handle_path di bawah hanya cocokkan
+	# path eksak /dashboard/* — tanpa redirect ini, refresh/akses /dashboard jatuh ke
+	# catch-all prelanding & memunculkan "Tautan tidak valid".
+	redir /dashboard /dashboard/ 301
+
 	# Dashboard SPA (T-16) di /dashboard/* (base=/dashboard/, SPA fallback).
 	handle_path /dashboard/* {
 		root * /srv/dashboard

@@ -329,16 +329,51 @@ def breakdown(
     return [{"key": str(r[0]), "count": int(r[1])} for r in rows]
 
 
-def _charging_trx_ids(
-    charging_status: str, lo: datetime, hi: datetime, *, settings: Settings | None = None
+def _outcome_trx_ids(
+    lo: datetime, hi: datetime, *, subscription: bool = False,
+    charging_status: str | None = None, charging_fail_reason: str | None = None,
+    settings: Settings | None = None,
 ) -> list[str]:
-    """trx_id dgn charging_status tertentu dari OLAP `outcome_log` (full-OLAP, filter search)."""
+    """trx_id outcome langganan dari OLAP `outcome_log` (full-OLAP, filter search berjenjang T-27).
+
+    - subscription=True → hanya callback_type='subscription' (punya outcome langganan).
+    - charging_status → 'success' | 'failed'.
+    - charging_fail_reason → 'insufficient_balance' | 'daily_limit_reached' | 'other'
+      ('other' = gagal tanpa reason spesifik → charging_status='failed' & reason kosong).
+    """
     s = settings or get_settings()
+    conds = ["received_at >= {lo:DateTime}", "received_at < {hi:DateTime}"]
+    params: dict = {"lo": lo, "hi": hi}
+    if subscription:
+        conds.append("callback_type = {ct:String}")
+        params["ct"] = "subscription"
+    if charging_status:
+        conds.append("charging_status = {cs:String}")
+        params["cs"] = charging_status
+    if charging_fail_reason:
+        if charging_fail_reason == "other":
+            conds.append("charging_status = 'failed'")
+            conds.append("charging_fail_reason = ''")
+        else:
+            conds.append("charging_fail_reason = {cfr:String}")
+            params["cfr"] = charging_fail_reason
     rows = _get_client(s).query(
         "SELECT DISTINCT trx_id FROM outcome_log "
-        "WHERE charging_status = {cs:String} AND received_at >= {lo:DateTime} "
-        "AND received_at < {hi:DateTime} LIMIT 5000",
-        parameters={"cs": charging_status, "lo": lo, "hi": hi},
+        f"WHERE {' AND '.join(conds)} LIMIT 5000",
+        parameters=params,
+    ).result_rows
+    return [r[0] for r in rows]
+
+
+def distinct_countries(*, settings: Settings | None = None) -> list[str]:
+    """Negara (ISO ip_country) yang pernah muncul di OLAP `traffic_events`, urut alfabetis.
+
+    Untuk dropdown filter Pencarian (T-27) — selaras pola registry service/campaign.
+    """
+    s = settings or get_settings()
+    rows = _get_client(s).query(
+        "SELECT DISTINCT ip_country FROM traffic_events "
+        "WHERE ip_country != '' ORDER BY ip_country LIMIT 1000"
     ).result_rows
     return [r[0] for r in rows]
 
@@ -348,6 +383,7 @@ def search(
     service=None, campaign=None, source=None, pub_id=None, from_ts=None, to_ts=None,
     webview=None, browser=None, device_brand=None, device_model=None, os=None,
     charging_status=None, vpn=None, weboptin_status=None,
+    subscribed=None, charging_fail_reason=None,
     limit=50, offset=0, settings: Settings | None = None,
 ) -> list[dict]:
     s = settings or get_settings()
@@ -385,8 +421,13 @@ def search(
         eq("is_webview", "webview", 1 if webview else 0, "UInt8")
     if vpn is not None:
         eq("vpn_proxy_tor", "vpn", 1 if vpn else 0, "UInt8")
-    if charging_status:  # K4: filter charging via subset trx_id dari OLTP
-        ids = _charging_trx_ids(charging_status, lo, hi)
+    # Filter outcome langganan berjenjang (T-27): subscribed→charging_status→charging_fail_reason.
+    # Semua via subset trx_id dari OLAP outcome_log (full-OLAP).
+    if subscribed or charging_status or charging_fail_reason:
+        ids = _outcome_trx_ids(
+            lo, hi, subscription=bool(subscribed),
+            charging_status=charging_status, charging_fail_reason=charging_fail_reason,
+        )
         if not ids:
             return []
         where.append("trx_id IN {ctrx:Array(String)}")

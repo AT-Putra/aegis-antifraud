@@ -18,6 +18,7 @@ export const handlers = [
   http.get(`${B}/v1/analytics/timeseries`, () => HttpResponse.json([])),
   http.get(`${B}/v1/analytics/breakdown`, () => HttpResponse.json([])),
   http.get(`${B}/v1/analytics/search`, () => HttpResponse.json([])),
+  http.get(`${B}/v1/analytics/countries`, () => HttpResponse.json(["ID", "MY", "SG"])),
   http.get(`${B}/v1/analytics/block-reasons`, () => HttpResponse.json([])),
   http.get(`${B}/v1/analytics/behavior-stats`, () => HttpResponse.json([])),
   http.get(`${B}/v1/registry/services`, () => HttpResponse.json([])),

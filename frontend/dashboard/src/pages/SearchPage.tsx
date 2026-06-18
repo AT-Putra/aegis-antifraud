@@ -1,4 +1,4 @@
-import { Badge, Button, Card, Group, SimpleGrid, Text, TextInput } from "@mantine/core";
+import { Badge, Button, Card, Group, Select, SimpleGrid, Text, TextInput } from "@mantine/core";
 import { IconSearch, IconX } from "@tabler/icons-react";
 import { DataTable, type DataTableSortStatus } from "mantine-datatable";
 import { useMemo, useState } from "react";
@@ -6,13 +6,14 @@ import { useNavigate } from "react-router-dom";
 
 import type { SearchResultItem } from "../api/types";
 import { DecisionBadge } from "../components/DecisionBadge";
+import { OutcomeFilters } from "../components/OutcomeFilters";
 import { PageHeader } from "../components/PageHeader";
 import { ServiceCampaignPicker } from "../components/ServiceCampaignPicker";
-import { useSearch } from "../hooks/queries";
+import { useCountryOptions, useSearch } from "../hooks/queries";
 import { formatTs } from "../lib/tz";
 
-// service & campaign jadi dropdown chained (entitas terdaftar); sisanya teks bebas.
-const FIELDS = ["trx_id", "device_id", "decision", "source", "pub_id", "country", "browser"];
+// service/campaign/decision/country jadi dropdown (nilai tetap/terdaftar); sisanya teks bebas.
+const FIELDS = ["trx_id", "device_id", "source", "pub_id", "browser"];
 const PAGE_SIZE = 15;
 
 type SortKey = keyof Pick<SearchResultItem, "trx_id" | "decision" | "service" | "campaign" | "final_score" | "ts">;
@@ -34,6 +35,7 @@ export function SearchPage() {
     direction: "desc",
   });
   const navigate = useNavigate();
+  const countries = useCountryOptions();
   const q = useSearch(active ?? {}, active !== null);
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,6 +102,40 @@ export function SearchPage() {
               setDraft((d) => ({ ...d, service: sc.service ?? "", campaign: sc.campaign ?? "" }))
             }
             width={200}
+          />
+          <Select
+            label="decision"
+            aria-label="decision"
+            placeholder="semua"
+            data={[
+              { value: "allow", label: "allow" },
+              { value: "block", label: "block" },
+            ]}
+            value={draft.decision ?? null}
+            onChange={(v) => setDraft((d) => ({ ...d, decision: v ?? "" }))}
+            clearable
+            w={160}
+          />
+          <Select
+            label="country"
+            aria-label="country"
+            placeholder={countries.isLoading ? "memuat…" : "semua"}
+            data={(countries.data ?? []).map((c) => ({ value: c, label: c }))}
+            value={draft.country ?? null}
+            onChange={(v) => setDraft((d) => ({ ...d, country: v ?? "" }))}
+            searchable
+            clearable
+            nothingFoundMessage="Tidak ada negara"
+            w={160}
+          />
+          <OutcomeFilters
+            value={{
+              subscribed: draft.subscribed ?? "",
+              charging_status: draft.charging_status ?? "",
+              charging_fail_reason: draft.charging_fail_reason ?? "",
+            }}
+            onChange={(o) => setDraft((d) => ({ ...d, ...o }))}
+            width={180}
           />
         </Group>
         <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="sm">

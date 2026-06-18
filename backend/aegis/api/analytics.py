@@ -174,6 +174,8 @@ def get_search(
     charging_status: str | None = None,
     vpn: bool | None = None,
     weboptin_status: str | None = None,
+    subscribed: bool | None = None,
+    charging_fail_reason: str | None = None,
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     _claims: dict = _guard,
@@ -183,9 +185,16 @@ def get_search(
         service=service, campaign=campaign, source=source, pub_id=pub_id, from_ts=from_, to_ts=to,
         webview=webview, browser=browser, device_brand=device_brand,
         device_model=device_model, os=os, charging_status=charging_status, vpn=vpn,
-        weboptin_status=weboptin_status, limit=limit, offset=offset,
+        weboptin_status=weboptin_status, subscribed=subscribed,
+        charging_fail_reason=charging_fail_reason, limit=limit, offset=offset,
     )
     return [SearchResultItem(**r) for r in rows]
+
+
+@router.get("/analytics/countries", response_model=list[str])
+def get_countries(_claims: dict = _guard) -> list[str]:
+    """Negara (ISO) yang ada di data untuk dropdown filter Pencarian (T-27, admin & user)."""
+    return analytics_repo.distinct_countries()
 
 
 @router.get("/analytics/decision/{trx_id}", response_model=DecisionDetail)
@@ -222,7 +231,7 @@ def stream(
                     None, None, service=service, campaign=campaign, source=source, pub_id=pub_id
                 )
                 yield _sse(kpi, "kpi")
-                recent = analytics_repo.recent_decisions(since=last_ts, limit=20)
+                recent = analytics_repo.recent_decisions(since=last_ts, limit=50)
                 for row in reversed(recent):  # kronologis lama→baru
                     yield _sse(row, "decision")
                     last_ts = row["ts"]
