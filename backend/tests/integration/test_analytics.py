@@ -158,6 +158,18 @@ def test_decision_detail(ch, client, auth) -> None:
     assert "is_webview" in d["device_info"] and "country" in d["ip_intelligence"]
 
 
+def test_decision_detail_ip_address(ch, client, auth) -> None:
+    # T-23 audit: raw IP tersimpan di traffic_events → muncul di ip_intelligence detail.
+    trx = f"t-{uuid.uuid4().hex[:8]}"
+    ch.insert(
+        "traffic_events",
+        [[trx, "block", "203.0.113.9"]],
+        column_names=["trx_id", "decision", "ip_address"],
+    )
+    d = client.get(f"/v1/analytics/decision/{trx}", headers=auth).json()
+    assert d["ip_intelligence"]["ip_address"] == "203.0.113.9"
+
+
 def test_decision_detail_404(ch, client, auth) -> None:
     r = client.get(f"/v1/analytics/decision/nope-{uuid.uuid4().hex[:8]}", headers=auth)
     assert r.status_code == 404

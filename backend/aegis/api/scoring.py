@@ -176,7 +176,7 @@ def score_endpoint(req: ScoreRequest, request: Request):
             trx_id=req.trx_id, device_id=device.device_id, service=req.service,
             campaign=req.campaign, source=req.source, pub_id=req.pub_id,
             signals=req.signals.model_dump(), features=extract_features(feature_input),
-            ip_intel=ip_intel, decision=outcome.decision, final_score=outcome.final_score,
+            ip_intel=ip_intel, ip=ip, decision=outcome.decision, final_score=outcome.final_score,
             weboptin_status=weboptin_status,
             rules_version=outcome.rules_version, model_version=outcome.model_version,
             reason=outcome.reason,

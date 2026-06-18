@@ -524,7 +524,8 @@ def decision_detail(trx_id: str, *, settings: Settings | None = None) -> dict | 
         "SELECT trx_id, device_id, service, source, pub_id, decision, weboptin_status, "
         "final_score, signals, ip_country, ip_asn, ip_isp, connection_type, vpn_proxy_tor, "
         "ip_reputation, browser, os, device_type, device_brand, device_model, is_webview, "
-        "score_breakdown, campaign, features FROM traffic_events WHERE trx_id = {trx:String} "
+        "score_breakdown, campaign, features, ip_address "
+        "FROM traffic_events WHERE trx_id = {trx:String} "
         "ORDER BY ts DESC LIMIT 1",
         parameters={"trx": trx_id},
     ).result_rows
@@ -544,6 +545,7 @@ def decision_detail(trx_id: str, *, settings: Settings | None = None) -> dict | 
             "weboptin_status": r[6] or None, "final_score": float(r[7]),
             "signals": json.loads(r[8]) if r[8] else {},
             "ip_intelligence": {
+                "ip_address": r[24] or None,
                 "country": r[9] or None, "asn": int(r[10]) or None, "isp": r[11] or None,
                 "connection_type": r[12] or None, "vpn_proxy_tor": bool(r[13]),
                 "ip_reputation": r[14] or None,

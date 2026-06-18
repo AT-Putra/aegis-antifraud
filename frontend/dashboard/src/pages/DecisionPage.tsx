@@ -353,6 +353,7 @@ export function DecisionPage() {
           <SectionCard icon={IconWorld} title="IP intelligence">
             <KeyValue
               rows={[
+                { label: "IP address", value: fmt(ip.ip_address) },
                 { label: "Negara", value: fmt(ip.country) },
                 { label: "ASN", value: fmt(ip.asn) },
                 { label: "ISP", value: fmt(ip.isp) },

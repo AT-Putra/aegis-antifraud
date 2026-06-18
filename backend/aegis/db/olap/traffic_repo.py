@@ -40,6 +40,7 @@ def write_event(
     signals: dict,
     features: dict,
     ip_intel: dict,
+    ip: str | None = None,
     decision: str,
     final_score: float | None,
     weboptin_status: str,
@@ -67,13 +68,14 @@ def write_event(
             di.get("brand") or "", di.get("model") or "", 1 if is_webview else 0,
             json.dumps(score_breakdown or {}, default=str),
             campaign or "", json.dumps(source_params or {}, default=str),
+            ip or "",
         ]],
         column_names=[
             "trx_id", "device_id", "service", "source", "pub_id", "signals", "features",
             "ip_country", "ip_asn", "ip_isp", "connection_type", "vpn_proxy_tor",
             "ip_reputation", "decision", "final_score", "weboptin_status",
             "browser", "os", "device_type", "device_brand", "device_model", "is_webview",
-            "score_breakdown", "campaign", "source_params",
+            "score_breakdown", "campaign", "source_params", "ip_address",
         ],
         settings=_ASYNC,
     )

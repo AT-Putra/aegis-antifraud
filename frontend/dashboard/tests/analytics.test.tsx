@@ -83,7 +83,8 @@ describe("AC-DASH-02 analitik realtime + pencarian + detail", () => {
         HttpResponse.json({
           trx_id: "trx-9", device_id: "d1", service: "svc", campaign: "promo", source: "fb",
           pub_id: "1", decision: "allow", weboptin_status: "minted", weboptin_host: "telco",
-          final_score: 0.2, score_breakdown: { rules: 0.1 }, signals: {}, ip_intelligence: {},
+          final_score: 0.2, score_breakdown: { rules: 0.1 }, signals: {},
+          ip_intelligence: { ip_address: "203.0.113.9", country: "ID" },
           device_info: {}, rules_version: 1, model_version: 0, outcome: {},
         }),
       ),
@@ -91,6 +92,8 @@ describe("AC-DASH-02 analitik realtime + pencarian + detail", () => {
     renderApp(["/decision/trx-9"]);
     await waitFor(() => expect(screen.getByTestId("decision-meta")).toBeInTheDocument());
     expect(within(screen.getByTestId("decision-meta")).getByText("allow")).toBeInTheDocument();
+    // T-23 audit: IP address tampil di card IP intelligence.
+    expect(screen.getByText("203.0.113.9")).toBeInTheDocument();
     // explainability absen → tak ada tabel penjelasan (degradasi anggun).
     expect(screen.queryByTestId("explainability")).not.toBeInTheDocument();
   });
