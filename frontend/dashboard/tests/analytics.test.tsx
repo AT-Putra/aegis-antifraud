@@ -4,9 +4,36 @@ import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 
 import { server } from "./server";
+import { startOfTodayUtcIso } from "../src/lib/tz";
 import { loginAs, renderApp } from "./utils";
 
 describe("AC-DASH-02 analitik realtime + pencarian + detail", () => {
+  // ADR-017: default tanpa filter waktu = hari ini 00:00→sekarang dalam timezone profil.
+  it("default rentang = hari ini (from terkirim, to kosong) + chart per jam", async () => {
+    loginAs("admin"); // profil timezone = Asia/Jakarta
+    let sum: URLSearchParams | null = null;
+    let gran = "";
+    server.use(
+      http.get("http://localhost/v1/analytics/summary", ({ request }) => {
+        sum = new URL(request.url).searchParams;
+        return HttpResponse.json({
+          total: 0, allow: 0, block: 0, weboptin_failed: 0, fraud_est: 0, complaints: 0,
+          charging_fail_breakdown: {},
+        });
+      }),
+      http.get("http://localhost/v1/analytics/timeseries", ({ request }) => {
+        gran = new URL(request.url).searchParams.get("granularity") ?? "";
+        return HttpResponse.json([]);
+      }),
+    );
+    renderApp(["/"]);
+    await waitFor(() => expect(sum).not.toBeNull());
+    expect(sum!.get("tz")).toBe("Asia/Jakarta");
+    expect(sum!.get("from")).toBe(startOfTodayUtcIso("Asia/Jakarta"));
+    expect(sum!.has("to")).toBe(false); // kosong → backend pakai now
+    await waitFor(() => expect(gran).toBe("hour")); // hari ini → intraday per jam
+  });
+
   it("KPI summary + feed SSE tampil", async () => {
     loginAs("admin");
     server.use(

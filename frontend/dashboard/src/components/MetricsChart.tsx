@@ -9,9 +9,20 @@ import { useState } from "react";
 
 import type { AnalyticsFilters } from "../api/types";
 import { useTimeseries } from "../hooks/queries";
-import { formatTs } from "../lib/tz";
+import { formatBucket, startOfTodayUtcIso, wallToUtcIso } from "../lib/tz";
 import { EmptyState, LoadingRows } from "./StateViews";
 import { IconChartHistogram } from "@tabler/icons-react";
+
+// Granularitas adaptif (ADR-017): rentang efektif ≤2 hari → per jam (intraday hari ini),
+// >2 hari → per hari. Rentang efektif memakai default "hari ini" yg sama dgn query.
+function granularityFor(filters: AnalyticsFilters): "hour" | "day" {
+  const tz = filters.tz || "Asia/Jakarta";
+  const fromMs = new Date(
+    filters.from ? wallToUtcIso(filters.from, tz) : startOfTodayUtcIso(tz),
+  ).getTime();
+  const toMs = filters.to ? new Date(wallToUtcIso(filters.to, tz)).getTime() : Date.now();
+  return (toMs - fromMs) / 86_400_000 <= 2 ? "hour" : "day";
+}
 
 // Warna selaras KPICards/decision: total=indigo, allow=teal, block=red, weboptin=orange.
 const METRICS = [
@@ -27,11 +38,12 @@ export function MetricsChart({ filters }: { filters: AnalyticsFilters }) {
   // Default semua metrik tampil.
   const [visible, setVisible] = useState<MetricKey[]>(METRICS.map((m) => m.key));
 
+  const gran = granularityFor(filters);
   // Satu query per metrik (hook dipanggil tetap & berurutan — aman aturan hooks).
-  const qTotal = useTimeseries("total", "day", filters);
-  const qAllow = useTimeseries("allow", "day", filters);
-  const qBlock = useTimeseries("block", "day", filters);
-  const qWeboptin = useTimeseries("weboptin_failed", "day", filters);
+  const qTotal = useTimeseries("total", gran, filters);
+  const qAllow = useTimeseries("allow", gran, filters);
+  const qBlock = useTimeseries("block", gran, filters);
+  const qWeboptin = useTimeseries("weboptin_failed", gran, filters);
   const queries: Record<MetricKey, typeof qTotal> = {
     total: qTotal,
     allow: qAllow,
@@ -45,7 +57,7 @@ export function MetricsChart({ filters }: { filters: AnalyticsFilters }) {
   const byBucket = new Map<string, Record<string, number | string>>();
   for (const m of METRICS) {
     for (const p of queries[m.key].data ?? []) {
-      const label = formatTs(p.bucket_ts, filters.tz);
+      const label = formatBucket(p.bucket_ts, gran);
       const row = byBucket.get(p.bucket_ts) ?? { bucket: label };
       row[m.key] = p.value;
       byBucket.set(p.bucket_ts, row);

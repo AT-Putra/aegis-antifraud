@@ -2,7 +2,7 @@ import { BarChart } from "@mantine/charts";
 import { Badge, Card, Group, Stack, Text, ThemeIcon } from "@mantine/core";
 import { IconBroadcast, IconChartBar, IconChartHistogram, IconList } from "@tabler/icons-react";
 import { DataTable, type DataTableSortStatus } from "mantine-datatable";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import type { AnalyticsFilters } from "../api/types";
@@ -13,7 +13,7 @@ import { MetricsChart } from "../components/MetricsChart";
 import { PageHeader } from "../components/PageHeader";
 import { BehaviorStatsPanel, BlockReasonsPanel } from "../components/StatsPanels";
 import { EmptyState, ErrorState, LoadingRows } from "../components/StateViews";
-import { useBreakdown, useSummary } from "../hooks/queries";
+import { useBreakdown, useMe, useSummary } from "../hooks/queries";
 import { useStream } from "../hooks/useStream";
 import { browserTz, formatTs } from "../lib/tz";
 
@@ -102,7 +102,13 @@ function BreakdownCell({ b }: { b: ScoreBreakdown }) {
 }
 
 export function DashboardPage() {
+  const me = useMe();
   const [filters, setFilters] = useState<AnalyticsFilters>({ tz: browserTz() });
+  // Timezone tampilan & default rentang = profil pengguna (Pengaturan), fallback browser.
+  // Adopsi saat profil termuat; pengguna belum punya pemilih tz di FilterBar (aman timpa).
+  useEffect(() => {
+    if (me.data?.timezone) setFilters((fz) => ({ ...fz, tz: me.data!.timezone }));
+  }, [me.data?.timezone]);
   const summary = useSummary(filters);
   const bd = useBreakdown("decision", filters);
   const stream = useStream(true);
@@ -268,7 +274,7 @@ export function DashboardPage() {
               accessor: "ts",
               title: "waktu",
               sortable: true,
-              render: (r) => (r.ts ? formatTs(r.ts) : "—"),
+              render: (r) => (r.ts ? formatTs(r.ts, filters.tz) : "—"),
             },
           ]}
         />

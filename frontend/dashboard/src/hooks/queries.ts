@@ -2,6 +2,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../api/client";
+import { startOfTodayUtcIso, wallToUtcIso } from "../lib/tz";
 import type {
   AnalyticsFilters,
   BehaviorStatItem,
@@ -15,15 +16,21 @@ import type {
   TimeseriesPoint,
 } from "../api/types";
 
-const f = (x: AnalyticsFilters): Record<string, unknown> => ({
-  from: x.from,
-  to: x.to,
-  tz: x.tz,
-  service: x.service,
-  campaign: x.campaign,
-  source: x.source,
-  pub_id: x.pub_id,
-});
+// ADR-017: default tanpa filter waktu = HARI INI 00:00→sekarang dalam timezone pengaturan.
+// from/to yang diisi pengguna = wall-time tz → dikonversi ke instant UTC sebelum dikirim
+// (kontrak API tetap menerima UTC). to kosong → diabaikan (backend pakai now).
+const f = (x: AnalyticsFilters): Record<string, unknown> => {
+  const tz = x.tz || "Asia/Jakarta";
+  return {
+    from: x.from ? wallToUtcIso(x.from, tz) : startOfTodayUtcIso(tz),
+    to: x.to ? wallToUtcIso(x.to, tz) : undefined,
+    tz,
+    service: x.service,
+    campaign: x.campaign,
+    source: x.source,
+    pub_id: x.pub_id,
+  };
+};
 
 export const useMe = () => useQuery({ queryKey: ["me"], queryFn: () => api.get<Me>("/v1/users/me") });
 
