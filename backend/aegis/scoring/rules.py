@@ -29,6 +29,14 @@ SOFT_FACTORS: tuple[tuple[str, str, float], ...] = (
     ("ip_is_datacenter", "IP datacenter", 0.3),
     ("ip_is_vpn_proxy_tor", "IP VPN/Proxy/Tor", 0.2),
     ("no_behavior", "Tanpa interaksi", 0.2),
+    # Konsistensi / anti-emulasi (ADR-020) — semua soft (false-positive aman).
+    ("ua_fp_inconsistent", "UA≠fingerprint (klaim mobile)", 0.3),
+    ("campaign_geo_mismatch", "Geo/carrier ≠ ekspektasi campaign", 0.2),
+    ("ip_tz_geo_mismatch", "Timezone ≠ benua IP", 0.2),
+    ("mouse_on_touchless", "Mouse di device tanpa touch", 0.2),
+    ("color_depth_anomaly", "colorDepth ganjil", 0.1),
+    # Velocity / behavioral-collision (ADR-021) — farm replay template behavior.
+    ("behavior_cluster", "Kluster perilaku identik (farm)", 0.5),
     ("ip_is_mobile_carrier", "Operator seluler (pengurang)", -0.05),
 )
 

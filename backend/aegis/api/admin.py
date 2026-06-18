@@ -270,7 +270,8 @@ def list_campaigns(
 def create_campaign(req: CampaignCreate, _admin: dict = Depends(current_admin)):
     try:
         out = campaign_registry.register_campaign(
-            req.slug, req.name, req.service, req.allowed_origins, req.allowed_countries
+            req.slug, req.name, req.service, req.allowed_origins, req.allowed_countries,
+            home_country=req.home_country, expect_mobile_carrier=req.expect_mobile_carrier,
         )
     except CampaignExistsError:
         return err(409, "campaign_exists", "slug campaign sudah dipakai")
@@ -287,7 +288,8 @@ def update_campaign(campaign_id: str, req: CampaignUpdate, _admin: dict = Depend
     try:
         out = campaign_registry.update_campaign(
             campaign_id, name=req.name, allowed_origins=req.allowed_origins,
-            allowed_countries=req.allowed_countries, status=req.status,
+            allowed_countries=req.allowed_countries, home_country=req.home_country,
+            expect_mobile_carrier=req.expect_mobile_carrier, status=req.status,
         )
     except CampaignNotFoundError:
         return err(404, "campaign_not_found", "campaign tidak ditemukan")

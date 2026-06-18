@@ -8,7 +8,7 @@ from psycopg.rows import dict_row
 # Kolom publik (join slug service utk tampilan/atribusi).
 _PUBLIC = (
     "c.id, c.slug, c.name, s.slug AS service, c.allowed_origins, c.allowed_countries, "
-    "c.status, c.created_at, c.updated_at"
+    "c.home_country, c.expect_mobile_carrier, c.status, c.created_at, c.updated_at"
 )
 _FROM = "FROM campaigns c JOIN services s ON s.id = c.service_id"
 
@@ -21,12 +21,16 @@ def insert_campaign(
     service_id: str,
     allowed_origins: list[str],
     allowed_countries: list[str],
+    home_country: str | None = None,
+    expect_mobile_carrier: bool = False,
 ) -> str:
     with conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO campaigns (slug, name, service_id, allowed_origins, allowed_countries) "
-            "VALUES (%s, %s, %s::uuid, %s, %s) RETURNING id",
-            (slug, name, service_id, allowed_origins, allowed_countries),
+            "INSERT INTO campaigns (slug, name, service_id, allowed_origins, allowed_countries, "
+            "home_country, expect_mobile_carrier) "
+            "VALUES (%s, %s, %s::uuid, %s, %s, %s, %s) RETURNING id",
+            (slug, name, service_id, allowed_origins, allowed_countries,
+             home_country, expect_mobile_carrier),
         )
         return str(cur.fetchone()[0])
 
@@ -71,6 +75,8 @@ def update_campaign(
     name: str | None = None,
     allowed_origins: list[str] | None = None,
     allowed_countries: list[str] | None = None,
+    home_country: str | None = None,
+    expect_mobile_carrier: bool | None = None,
     status: str | None = None,
 ) -> dict | None:
     sets: list[str] = []
@@ -79,6 +85,8 @@ def update_campaign(
         ("name", name),
         ("allowed_origins", allowed_origins),
         ("allowed_countries", allowed_countries),
+        ("home_country", home_country),
+        ("expect_mobile_carrier", expect_mobile_carrier),
         ("status", status),
     ):
         if val is not None:

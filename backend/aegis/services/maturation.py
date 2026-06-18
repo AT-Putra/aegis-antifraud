@@ -14,14 +14,21 @@ def is_human_label(
     has_complaint: bool,
     days_elapsed: float,
     maturation_days: int = DEFAULT_MATURATION_DAYS,
+    charging_fail_reason: str | None = None,
 ) -> bool | None:
-    """True=human, False=bukan human (komplain), None=belum dapat dipastikan.
+    """True=human, False=robot, None=belum dapat dipastikan.
 
     Human = langganan sukses + ter-charge + TANPA komplain setelah N hari.
+    Robot = komplain, ATAU charge gagal `daily_limit_reached` (sinyal fraud kuat, ADR-020).
+    Catatan: charge sukses + sinyal fraud kuat di-disqualifikasi terpisah di
+    `gather_training_data` (butuh fitur trx) → bukan di sini (fungsi murni).
     """
     if has_complaint:
         return False
     if not subscription_success:
+        # daily_limit_reached = sinyal fraud kuat (TRD §5) → robot; gagal lain → tak pasti.
+        if charging_fail_reason == "daily_limit_reached":
+            return False
         return None
     if days_elapsed < maturation_days:
         return None  # belum matang

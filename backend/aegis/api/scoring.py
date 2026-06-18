@@ -23,6 +23,7 @@ from aegis.schemas.scoring import ScoreRequest, SessionInitRequest
 from aegis.scoring.engine import ScoreOutcome, score
 from aegis.security import ratelimit
 from aegis.security.tokens import SessionTokenError, issue, verify_and_consume
+from aegis.services import velocity
 
 router = APIRouter(prefix="/v1")
 
@@ -120,11 +121,20 @@ def score_endpoint(req: ScoreRequest, request: Request):
     device_info = parse_device_info(
         request.headers.get("user-agent"), req.signals.fingerprint.ua_data
     )
+    # Velocity behavioral-collision (ADR-021): catat signature behavior & hitung jumlah
+    # device berbeda dgn template identik dlm window (farm replay). Best-effort (Redis).
+    bsig = velocity.behavior_signature(req.signals.behavior)
+    cluster = velocity.cluster_size(req.service, bsig, device.device_id)
     feature_input = FeatureInput(
         signals=req.signals,
         ip_intel=ip_intel,
         device_info=device_info,
         device_history={"event_count": device.event_count, "is_new": device.is_new},
+        campaign={  # ekspektasi geo/carrier campaign → fitur campaign_geo_mismatch (ADR-020)
+            "home_country": camp.home_country,
+            "expect_mobile_carrier": camp.expect_mobile_carrier,
+        },
+        velocity={"behavior_cluster_size": cluster},
     )
     cfg = request.app.state.config
     if cfg is None:

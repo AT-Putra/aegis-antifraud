@@ -31,6 +31,15 @@ class CampaignRuntime:
     allowed_origins: list[str]
     allowed_countries: list[str]
     status: str
+    home_country: str | None = None
+    expect_mobile_carrier: bool = False
+
+
+def _norm_home_country(home_country: str | None) -> str | None:
+    """Validasi & normalisasi home_country (ISO-2). None/'' = tanpa ekspektasi."""
+    if not home_country:
+        return None
+    return normalize_countries([home_country])[0]  # ValueError bila kode tak dikenal
 
 
 def _to_out(row: dict) -> CampaignOut:
@@ -41,6 +50,8 @@ def _to_out(row: dict) -> CampaignOut:
         service=row["service"],
         allowed_origins=list(row["allowed_origins"] or []),
         allowed_countries=list(row["allowed_countries"] or []),
+        home_country=row.get("home_country"),
+        expect_mobile_carrier=bool(row.get("expect_mobile_carrier")),
         status=row["status"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
@@ -56,11 +67,13 @@ def _validate_origins(origins: list[str]) -> None:
 def register_campaign(
     slug: str, name: str, service: str,
     allowed_origins: list[str], allowed_countries: list[str] | None = None,
+    home_country: str | None = None, expect_mobile_carrier: bool = False,
 ) -> CampaignOut:
     if not re.fullmatch(SLUG_PATTERN, slug):
         raise ValueError("slug invalid")
     _validate_origins(allowed_origins)
     countries = normalize_countries(allowed_countries or [])  # None/[] = ALL
+    home = _norm_home_country(home_country)
     with connection() as conn:
         svc = services_repo.get_by_slug(conn, service)
         if svc is None:
@@ -69,6 +82,7 @@ def register_campaign(
             cid = campaigns_repo.insert_campaign(
                 conn, slug=slug, name=name, service_id=str(svc["id"]),
                 allowed_origins=allowed_origins, allowed_countries=countries,
+                home_country=home, expect_mobile_carrier=expect_mobile_carrier,
             )
         except psycopg.errors.UniqueViolation as exc:
             raise CampaignExistsError(slug) from exc
@@ -86,6 +100,8 @@ def get_active_campaign(slug: str) -> CampaignRuntime | None:
         allowed_origins=list(row["allowed_origins"] or []),
         allowed_countries=list(row["allowed_countries"] or []),
         status=row["status"],
+        home_country=row.get("home_country"),
+        expect_mobile_carrier=bool(row.get("expect_mobile_carrier")),
     )
 
 
@@ -101,16 +117,21 @@ def update_campaign(
     name: str | None = None,
     allowed_origins: list[str] | None = None,
     allowed_countries: list[str] | None = None,
+    home_country: str | None = None,
+    expect_mobile_carrier: bool | None = None,
     status: str | None = None,
 ) -> CampaignOut:
     if allowed_origins is not None:
         _validate_origins(allowed_origins)
     if allowed_countries is not None:
         allowed_countries = normalize_countries(allowed_countries)  # [] = ALL
+    if home_country is not None:
+        home_country = _norm_home_country(home_country)
     with connection() as conn:
         row = campaigns_repo.update_campaign(
             conn, campaign_id, name=name, allowed_origins=allowed_origins,
-            allowed_countries=allowed_countries, status=status,
+            allowed_countries=allowed_countries, home_country=home_country,
+            expect_mobile_carrier=expect_mobile_carrier, status=status,
         )
     if row is None:
         raise CampaignNotFoundError(campaign_id)

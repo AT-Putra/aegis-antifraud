@@ -6,6 +6,7 @@ import {
   MultiSelect,
   Select,
   Stack,
+  Switch,
   Textarea,
   TextInput,
 } from "@mantine/core";
@@ -29,11 +30,14 @@ interface Draft {
   service: string;
   origins: string; // satu origin per baris
   countries: string[]; // kode ISO alpha-2, atau ["ALL"] = tanpa batas geo (F-17)
+  homeCountry: string | null; // ekspektasi negara (ADR-020); null = tanpa ekspektasi
+  expectCarrier: boolean; // harap IP operator seluler (ADR-020)
   status: "active" | "inactive";
 }
 const ALL = "ALL";
 const EMPTY: Draft = {
-  slug: "", name: "", service: "", origins: "", countries: [ALL], status: "active",
+  slug: "", name: "", service: "", origins: "", countries: [ALL],
+  homeCountry: null, expectCarrier: false, status: "active",
 };
 
 // ALL + daftar negara. ALL = pilihan eksplisit "tanpa batas" (disimpan sbg [] di backend).
@@ -80,6 +84,8 @@ export function CampaignsPage() {
       id: c.id, slug: c.slug, name: c.name, service: c.service,
       origins: (c.allowed_origins ?? []).join("\n"),
       countries: toDraftCountries(c.allowed_countries ?? []),
+      homeCountry: c.home_country ?? null,
+      expectCarrier: c.expect_mobile_carrier ?? false,
       status: c.status,
     });
     open();
@@ -98,9 +104,10 @@ export function CampaignsPage() {
 
   const submit = () => {
     const countries = d.countries.includes(ALL) ? [] : d.countries; // ["ALL"] → [] (= ALL)
+    const geo = { home_country: d.homeCountry || null, expect_mobile_carrier: d.expectCarrier };
     const body: Record<string, unknown> = editing
-      ? { name: d.name, allowed_origins: parseOrigins(d.origins), allowed_countries: countries, status: d.status }
-      : { slug: d.slug, name: d.name, service: d.service, allowed_origins: parseOrigins(d.origins), allowed_countries: countries };
+      ? { name: d.name, allowed_origins: parseOrigins(d.origins), allowed_countries: countries, status: d.status, ...geo }
+      : { slug: d.slug, name: d.name, service: d.service, allowed_origins: parseOrigins(d.origins), allowed_countries: countries, ...geo };
     save.mutate({ id: d.id, body }, { onSuccess: close });
   };
 
@@ -208,6 +215,24 @@ export function CampaignsPage() {
             hidePickedOptions
             nothingFoundMessage="Negara tidak ditemukan"
             maxDropdownHeight={260}
+          />
+          <Select
+            label="Negara asal diharapkan (home country)"
+            description="Ekspektasi geo (ADR-020): IP di luar negara ini → sinyal soft campaign_geo_mismatch (bukan blokir). Kosong = tanpa ekspektasi."
+            placeholder="(tanpa ekspektasi)"
+            data={COUNTRY_OPTIONS}
+            value={d.homeCountry}
+            onChange={(v) => setD({ ...d, homeCountry: v })}
+            searchable
+            clearable
+            nothingFoundMessage="Negara tidak ditemukan"
+            maxDropdownHeight={260}
+          />
+          <Switch
+            label="Harapkan IP operator seluler"
+            description="Untuk campaign billing operator (mis. Telkomsel): IP non-seluler → sinyal soft campaign_geo_mismatch."
+            checked={d.expectCarrier}
+            onChange={(e) => setD({ ...d, expectCarrier: e.currentTarget.checked })}
           />
           {editing && (
             <Select label="Status" data={["active", "inactive"]} value={d.status} onChange={(v) => setD({ ...d, status: (v as "active" | "inactive") ?? "active" })} />

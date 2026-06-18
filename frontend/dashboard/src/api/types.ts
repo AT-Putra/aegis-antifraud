@@ -163,6 +163,8 @@ export interface CampaignOut {
   service: string;
   allowed_origins: string[];
   allowed_countries: string[]; // ISO 3166-1 alpha-2; [] = ALL (tanpa batas geo). F-17
+  home_country: string | null; // ISO 3166-1 alpha-2; null = tanpa ekspektasi geo. ADR-020
+  expect_mobile_carrier: boolean; // harap IP operator seluler (mis. billing Telkomsel). ADR-020
   status: "active" | "inactive";
   created_at: string;
   updated_at: string;

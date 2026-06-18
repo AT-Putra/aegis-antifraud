@@ -28,6 +28,8 @@ from aegis.db.postgres import connection
 from aegis.features.extract import feature_vector
 from aegis.ml import store
 from aegis.ml.train import train_models
+from aegis.scoring.config import load_active_config
+from aegis.scoring.rules import evaluate_rules
 from aegis.services import feedback as feedback_svc
 from aegis.services.maturation import DEFAULT_MATURATION_DAYS, is_human_label
 
@@ -63,6 +65,7 @@ def _build_labels(maturation_days: int) -> dict[str, int]:
             has_complaint=bool(c["has_complaint"]),
             days_elapsed=days,
             maturation_days=maturation_days,
+            charging_fail_reason=c.get("charging_fail_reason"),
         )
         if verdict is True:
             labels[c["trx_id"]] = _HUMAN
@@ -75,14 +78,29 @@ def _build_labels(maturation_days: int) -> dict[str, int]:
     return labels
 
 
+def _human_label_disqualified(feats: dict) -> bool:
+    """Pengerasan label (ADR-020): charge sukses BUKAN bukti human bila scorer SENDIRI
+    menandai trx berisiko (rules_risk ≥ threshold aktif ATAU hard-rule). Cegah poisoning."""
+    try:
+        cfg = load_active_config()
+    except Exception:
+        return False  # tanpa config aktif → tak bisa menilai → jangan buang label
+    rr = evaluate_rules(feats, cfg.params)
+    return rr.hard_block or rr.rules_risk >= cfg.threshold
+
+
 def gather_training_data(maturation_days: int) -> tuple[list[list[float]], list[int], dict]:
     labels = _build_labels(maturation_days)
     features = analytics_repo.features_by_trx(list(labels))
     X: list[list[float]] = []
     y: list[int] = []
+    excluded_poison = 0
     for trx, label in labels.items():
         feats = features.get(trx)
         if feats is None:  # fitur OLAP hilang (loss) → lewati
+            continue
+        if label == _HUMAN and _human_label_disqualified(feats):
+            excluded_poison += 1  # charge sukses tapi berisiko → exclude (jangan latih sbg human)
             continue
         X.append(feature_vector(feats))
         y.append(label)
@@ -91,6 +109,7 @@ def gather_training_data(maturation_days: int) -> tuple[list[list[float]], list[
         "with_features": len(X),
         "n_human": int(sum(1 for v in y if v == _HUMAN)),
         "n_robot": int(sum(1 for v in y if v == _ROBOT)),
+        "excluded_poison": excluded_poison,
     }
     return X, y, meta
 

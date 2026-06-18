@@ -165,6 +165,8 @@ class CampaignOut(BaseModel):
     service: str
     allowed_origins: list[str] = []
     allowed_countries: list[str] = []
+    home_country: str | None = None  # ADR-020: ekspektasi geo (campaign_geo_mismatch)
+    expect_mobile_carrier: bool = False
     status: Literal["active", "inactive"]
     created_at: datetime
     updated_at: datetime
@@ -177,6 +179,8 @@ class CampaignCreate(BaseModel):
     service: str = Field(pattern=SLUG_PATTERN)
     allowed_origins: list[str] = []
     allowed_countries: list[str] = []
+    home_country: str | None = None
+    expect_mobile_carrier: bool = False
 
 
 class CampaignUpdate(BaseModel):
@@ -184,4 +188,6 @@ class CampaignUpdate(BaseModel):
     name: str | None = None
     allowed_origins: list[str] | None = None
     allowed_countries: list[str] | None = None
+    home_country: str | None = None
+    expect_mobile_carrier: bool | None = None
     status: Literal["active", "inactive"] | None = None

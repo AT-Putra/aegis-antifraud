@@ -13,6 +13,7 @@ from aegis.config import get_settings
 
 _UNKNOWN: dict = {
     "country": None,
+    "continent": None,
     "asn": None,
     "isp": None,
     "connection_type": None,
@@ -149,7 +150,9 @@ def enrich_ip(ip: str | None) -> dict:
     city = _city_reader()
     if city is not None:
         try:
-            result["country"] = city.city(ip).country.iso_code
+            rec = city.city(ip)
+            result["country"] = rec.country.iso_code
+            result["continent"] = rec.continent.code  # EU/AS/AF/OC/NA/SA/AN (tz_geo_mismatch)
         except Exception:
             pass
 

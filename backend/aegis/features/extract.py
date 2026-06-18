@@ -10,9 +10,49 @@ from aegis.features.schema import FEATURE_ORDER, FeatureInput
 
 _KNOWN_INAPP = {"facebook", "instagram", "tiktok", "line"}
 
+# Platform desktop (navigator.platform) — token khas non-mobile. Android asli =
+# "Linux armv8l"/"Linux aarch64"; desktop Linux = "Linux x86_64" (server/emulator).
+_DESKTOP_PLATFORM_TOKENS = ("x86", "win", "mac", "wow64")
+_NORMAL_COLOR_DEPTHS = {24, 30, 32}
+_CLUSTER_K = 3  # ≥K device_id berbeda berbagi signature behavior identik = farm (ADR-021)
+
+# timezone IANA (token pertama) → himpunan benua IP yang konsisten. Granularitas benua
+# (heuristik; tak menangkap mismatch intra-benua) — ADR-020.
+_TZ_CONTINENTS: dict[str, set[str]] = {
+    "Africa": {"AF"},
+    "America": {"NA", "SA"},
+    "Antarctica": {"AN"},
+    "Asia": {"AS"},
+    "Atlantic": {"EU", "AF", "NA", "SA"},
+    "Australia": {"OC"},
+    "Europe": {"EU"},
+    "Indian": {"AS", "AF", "OC"},
+    "Pacific": {"OC", "NA"},
+}
+
 
 def _b(x: object) -> float:
     return 1.0 if x else 0.0
+
+
+def _claims_mobile(device_info: dict, ua_data: dict) -> bool:
+    """Device MENGAKU mobile (dari device-info terparse UA atau UA-CH `mobile`)."""
+    if device_info.get("device_type") in ("mobile", "tablet"):
+        return True
+    if device_info.get("os") in ("Android", "iOS"):
+        return True
+    return ua_data.get("mobile") is True
+
+
+def _tz_geo_mismatch(timezone: str | None, continent: str | None) -> bool:
+    """True bila benua timezone client tak konsisten dgn benua negara IP."""
+    if not timezone or not continent:
+        return False
+    region = timezone.split("/", 1)[0]
+    allowed = _TZ_CONTINENTS.get(region)
+    if not allowed:
+        return False  # region tak terpetakan → jangan tebak
+    return continent not in allowed
 
 
 def extract_features(inp: FeatureInput) -> dict[str, float]:
@@ -24,6 +64,10 @@ def extract_features(inp: FeatureInput) -> dict[str, float]:
     be = fp.browser_environment
     ip = inp.ip_intel or {}
     hist = inp.device_history or {}
+    di = inp.device_info or {}
+    camp = inp.campaign or {}
+    vel = inp.velocity or {}
+    ua_data = fp.ua_data or {}
 
     mouse = beh.mouse or {}
     timing = beh.timing or {}
@@ -45,11 +89,14 @@ def extract_features(inp: FeatureInput) -> dict[str, float]:
 
     # --- behavior ---
     move_count = float(mouse.get("move_count", 0) or 0)
+    velocity_mean = float(mouse.get("velocity_mean", 0) or 0)
     tap_count = float(touch.get("tap_count", 0) or 0)
     gesture_count = float(touch.get("gesture_count", 0) or 0)
     interaction_count = float(timing.get("interaction_count", 0) or 0)
+    # Hardened (ADR-020): mouse-move ber-velocity 0 = sintetis → tak dihitung behavior.
+    real_mouse = move_count > 0 and velocity_mean > 0
     no_behavior = _b(
-        move_count == 0 and tap_count == 0 and gesture_count == 0 and interaction_count == 0
+        not real_mouse and tap_count == 0 and gesture_count == 0 and interaction_count == 0
     )
 
     # --- browser environment ---
@@ -60,6 +107,34 @@ def extract_features(inp: FeatureInput) -> dict[str, float]:
         webview_risk = 0.3
     else:
         webview_risk = 1.0
+
+    # --- konsistensi / anti-emulasi (ADR-020) ---
+    max_touch = fp.maxTouchPoints
+    platform = (fp.platform or "").lower()
+    claims_mobile = _claims_mobile(di, ua_data)
+    desktop_platform = any(t in platform for t in _DESKTOP_PLATFORM_TOKENS)
+    ua_mobile_false = ua_data.get("mobile") is False
+    # Klaim mobile tapi fingerprint bertentangan (tanpa touch/platform desktop/UA-CH non-mobile).
+    ua_fp_inconsistent = _b(
+        claims_mobile and (max_touch == 0 or desktop_platform or ua_mobile_false)
+    )
+    mouse_on_touchless = _b(move_count > 0 and max_touch == 0 and claims_mobile)
+
+    color_depth = fp.screen.colorDepth if fp.screen else None
+    color_depth_anomaly = _b(bool(color_depth) and color_depth not in _NORMAL_COLOR_DEPTHS)
+
+    tz_geo_mismatch = _b(_tz_geo_mismatch(fp.timezone, ip.get("continent")))
+
+    home_country = camp.get("home_country")
+    expect_carrier = bool(camp.get("expect_mobile_carrier"))
+    ip_country = ip.get("country")
+    campaign_geo_mismatch = _b(
+        (bool(home_country) and bool(ip_country) and ip_country != home_country)
+        or (expect_carrier and not ip.get("is_mobile_carrier"))
+    )
+
+    # Behavioral-collision: ≥K device berbeda berbagi signature behavior identik (ADR-021).
+    behavior_cluster = _b(float(vel.get("behavior_cluster_size", 0) or 0) >= _CLUSTER_K)
 
     feats: dict[str, float] = {
         "auto_webdriver": webdriver,
@@ -91,8 +166,13 @@ def extract_features(inp: FeatureInput) -> dict[str, float]:
         "ip_is_datacenter": _b(ip.get("is_datacenter")),
         "ip_is_vpn_proxy_tor": _b(ip.get("vpn_proxy_tor")),
         "ip_is_mobile_carrier": _b(ip.get("is_mobile_carrier")),
-        "ip_tz_geo_mismatch": _b(ip.get("tz_geo_mismatch")),
+        "ip_tz_geo_mismatch": tz_geo_mismatch,
         "ip_reputation_bad": _b(ip.get("ip_reputation")),
+        "ua_fp_inconsistent": ua_fp_inconsistent,
+        "campaign_geo_mismatch": campaign_geo_mismatch,
+        "color_depth_anomaly": color_depth_anomaly,
+        "mouse_on_touchless": mouse_on_touchless,
+        "behavior_cluster": behavior_cluster,
         "referrer_present": _b(getattr(attr, "referrer", None)),
         "locale_consistent": _b(getattr(attr, "locale_consistent", None)),
         "device_event_count": float(hist.get("event_count", 0) or 0),
