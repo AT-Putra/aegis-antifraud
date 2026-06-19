@@ -2,7 +2,7 @@
 
 Sistem deteksi & pencegahan fraud pada langganan **SMS Premium jalur WEB-OPT-IN**: memastikan hanya **manusia asli** yang diteruskan berlangganan, lewat scoring **device fingerprinting + user behavior** (rules + Isolation Forest + LightGBM).
 
-> Status: **live di produksi** · Versi `0.3.0` · Deploy: Docker Compose di 1 VM (Caddy auto-TLS).
+> Status: **live di produksi** · Versi `0.3.1` · Deploy: Docker Compose di 1 VM (Caddy auto-TLS).
 
 Dokumentasi teknis lengkap (sumber kebenaran) bersifat internal di `docs/private/` (tidak di-publish). Dokumen integrasi untuk mitra ada di [`docs/integrations/`](docs/integrations/).
 
