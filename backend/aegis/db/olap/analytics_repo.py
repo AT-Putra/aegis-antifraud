@@ -148,6 +148,63 @@ def _charging_kpis(
     return complaints, breakdown
 
 
+def charging_funnel(
+    from_ts=None, to_ts=None, *, service=None, campaign=None, source=None, pub_id=None,
+    settings: Settings | None = None,
+) -> dict:
+    """Funnel outcome langganan dari OLAP `outcome_log` (full-OLAP, scoping berjenjang, T-30).
+
+    registration_success = callback subscription (SubscriptionCallback HANYA dikirim saat
+    langganan sukses); charging_success/failed = subset charging_status; breakdown gagal =
+    insufficient_balance | daily_limit_reached | other (reason ''). complaints = callback
+    complaint. `uniqExact(trx_id)` agar tahan duplikat pra-merge (uq OLTP = (callback_type,
+    trx_id)) tanpa `FINAL`. Window pada received_at; scoping via trx IN traffic ber-scope.
+    """
+    s = settings or get_settings()
+    client = _get_client(s)
+    lo, hi = _range(from_ts, to_ts)
+    scoped = any([service, campaign, source, pub_id])
+    p: dict = {"lo": lo, "hi": hi}
+    in_clause = ""
+    if scoped:
+        sub = _scoped_trx_subquery(p, lo=lo, hi=hi, service=service, campaign=campaign,
+                                   source=source, pub_id=pub_id)
+        in_clause = f" AND trx_id IN ({sub})"
+    win = ("callback_type = 'subscription' AND received_at >= {lo:DateTime} "
+           f"AND received_at < {{hi:DateTime}}{in_clause}")
+    row = client.query(
+        "SELECT uniqExact(trx_id) AS reg, "
+        "uniqExactIf(trx_id, charging_status = 'success') AS ok, "
+        "uniqExactIf(trx_id, charging_status = 'failed') AS fail, "
+        "uniqExactIf(trx_id, charging_status = 'failed' AND "
+        "  charging_fail_reason = 'insufficient_balance') AS insuf, "
+        "uniqExactIf(trx_id, charging_status = 'failed' AND "
+        "  charging_fail_reason = 'daily_limit_reached') AS dlimit, "
+        "uniqExactIf(trx_id, charging_status = 'failed' AND "
+        "  charging_fail_reason NOT IN ('insufficient_balance', 'daily_limit_reached')) AS other "
+        f"FROM outcome_log WHERE {win}",
+        parameters=p,
+    ).result_rows
+    reg, ok, fail, insuf, dlimit, other = (row[0] if row else (0, 0, 0, 0, 0, 0))
+    complaints = int(client.query(
+        "SELECT uniqExact(trx_id) FROM outcome_log "
+        "WHERE callback_type = 'complaint' AND received_at >= {lo:DateTime} "
+        f"AND received_at < {{hi:DateTime}}{in_clause}",
+        parameters=p,
+    ).result_rows[0][0])
+    return {
+        "registration_success": int(reg),
+        "charging_success": int(ok),
+        "charging_failed": int(fail),
+        "charging_fail_breakdown": {
+            "insufficient_balance": int(insuf),
+            "daily_limit_reached": int(dlimit),
+            "other": int(other),
+        },
+        "complaints": complaints,
+    }
+
+
 def _fraud_est(
     from_ts: datetime, to_ts: datetime, *, service=None, campaign=None, source=None, pub_id=None,
     settings: Settings | None = None,

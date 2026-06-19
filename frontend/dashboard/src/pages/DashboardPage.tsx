@@ -11,6 +11,7 @@ import { FilterBar } from "../components/FilterBar";
 import { KPICards } from "../components/KPICards";
 import { MetricsChart } from "../components/MetricsChart";
 import { PageHeader } from "../components/PageHeader";
+import { ChargingFunnelPanel } from "../components/ChargingFunnelPanel";
 import { BehaviorStatsPanel, BlockReasonsPanel } from "../components/StatsPanels";
 import { EmptyState, ErrorState, LoadingRows } from "../components/StateViews";
 import { useBreakdown, useMe, useRecentDecisions, useSummary } from "../hooks/queries";
@@ -169,6 +170,8 @@ export function DashboardPage() {
       ) : summary.data ? (
         <KPICards summary={summary.data} />
       ) : null}
+
+      <ChargingFunnelPanel filters={filters} />
 
       <Card padding="md">
         <PanelTitle icon={IconChartHistogram} title="Tren per hari" />

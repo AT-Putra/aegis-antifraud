@@ -17,6 +17,16 @@ class SummaryOut(BaseModel):
     charging_fail_breakdown: dict[str, int]
 
 
+class ChargingFunnelOut(BaseModel):
+    """Funnel outcome langganan in-depth (T-30). Sumber OLAP outcome_log; rasio % dihitung FE."""
+
+    registration_success: int  # callback subscription = registrasi/langganan sukses
+    charging_success: int
+    charging_failed: int
+    charging_fail_breakdown: dict[str, int]  # insufficient_balance | daily_limit_reached | other
+    complaints: int
+
+
 class TimeseriesPoint(BaseModel):
     bucket_ts: datetime
     value: float

@@ -19,6 +19,15 @@ export interface Summary {
   charging_fail_breakdown: Record<string, number>;
 }
 
+// Funnel langganan & charging (T-30): agregat outcome OLAP utk panel in-depth Analitik.
+export interface ChargingFunnel {
+  registration_success: number; // callback subscription = registrasi/langganan sukses
+  charging_success: number;
+  charging_failed: number;
+  charging_fail_breakdown: Record<string, number>; // insufficient_balance|daily_limit_reached|other
+  complaints: number;
+}
+
 export interface TimeseriesPoint {
   bucket_ts: string;
   value: number;

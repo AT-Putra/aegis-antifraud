@@ -8,6 +8,7 @@ import type {
   BehaviorStatItem,
   BlockReasonItem,
   BreakdownItem,
+  ChargingFunnel,
   DecisionDetail,
   Me,
   RegistryOption,
@@ -45,6 +46,14 @@ export const useSummary = (filters: AnalyticsFilters) =>
   useQuery({
     queryKey: ["summary", filters],
     queryFn: () => api.get<Summary>("/v1/analytics/summary", f(filters)),
+    refetchInterval: liveInterval(filters),
+  });
+
+// T-30: funnel outcome langganan; perilaku live/beku identik useSummary (beku saat filter waktu).
+export const useChargingFunnel = (filters: AnalyticsFilters) =>
+  useQuery({
+    queryKey: ["charging-funnel", filters],
+    queryFn: () => api.get<ChargingFunnel>("/v1/analytics/charging-funnel", f(filters)),
     refetchInterval: liveInterval(filters),
   });
 

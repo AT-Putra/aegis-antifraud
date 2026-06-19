@@ -15,6 +15,13 @@ export const handlers = [
       charging_fail_breakdown: {},
     }),
   ),
+  http.get(`${B}/v1/analytics/charging-funnel`, () =>
+    HttpResponse.json({
+      registration_success: 0, charging_success: 0, charging_failed: 0,
+      charging_fail_breakdown: { insufficient_balance: 0, daily_limit_reached: 0, other: 0 },
+      complaints: 0,
+    }),
+  ),
   http.get(`${B}/v1/analytics/timeseries`, () => HttpResponse.json([])),
   http.get(`${B}/v1/analytics/breakdown`, () => HttpResponse.json([])),
   http.get(`${B}/v1/analytics/search`, () => HttpResponse.json([])),

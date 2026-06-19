@@ -210,6 +210,44 @@ def test_search_subscription_cascade_filters(client, auth) -> None:
     assert ids(charging_fail_reason="other") == {trx_other}             # gagal tanpa reason
 
 
+def test_charging_funnel_from_olap(client, auth) -> None:
+    """T-30: /analytics/charging-funnel agregat outcome langganan OLAP (scoping & breakdown)."""
+    ch = _ch()
+    if ch is None:
+        pytest.skip("ClickHouse tak terjangkau")
+    svc = f"fun-{uuid.uuid4().hex[:8]}"
+    ts = datetime(2033, 1, 1, 6, 0, 0)
+    trx_ok = f"{svc}-ok"        # subscription, charging success
+    trx_insf = f"{svc}-insf"    # subscription, failed insufficient_balance
+    trx_dl = f"{svc}-dl"        # subscription, failed daily_limit_reached
+    trx_other = f"{svc}-other"  # subscription, failed tanpa reason (other)
+    trx_cmpl = f"{svc}-cmpl"    # complaint
+    ch.insert("traffic_events", [
+        _traffic_row(trx=t, service=svc, decision="allow", ts=ts)
+        for t in (trx_ok, trx_insf, trx_dl, trx_other, trx_cmpl)
+    ], column_names=_TRAFFIC_COLS)
+    ch.insert("outcome_log", [
+        [trx_ok, "subscription", "success", "", ts],
+        [trx_insf, "subscription", "failed", "insufficient_balance", ts],
+        [trx_dl, "subscription", "failed", "daily_limit_reached", ts],
+        [trx_other, "subscription", "failed", "", ts],
+        [trx_cmpl, "complaint", "", "", ts],
+    ], column_names=["trx_id", "callback_type", "charging_status",
+                     "charging_fail_reason", "received_at"])
+
+    q = {"from": "2033-01-01T00:00:00", "to": "2033-01-02T00:00:00", "service": svc}
+    d = client.get("/v1/analytics/charging-funnel", params=q, headers=auth).json()
+    assert d["registration_success"] == 4  # 4 callback subscription
+    assert d["charging_success"] == 1
+    assert d["charging_failed"] == 3
+    assert d["charging_fail_breakdown"] == {
+        "insufficient_balance": 1, "daily_limit_reached": 1, "other": 1,
+    }
+    assert d["complaints"] == 1
+    assert set(d) == {"registration_success", "charging_success", "charging_failed",
+                      "charging_fail_breakdown", "complaints"}
+
+
 def test_feedback_review_mirrors_and_fraud_est(client, auth) -> None:
     """feedback accepted-robot → feedback_log → fraud_est menghitungnya."""
     ch = _ch()

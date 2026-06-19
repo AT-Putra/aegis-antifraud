@@ -22,6 +22,7 @@ from aegis.schemas.analytics import (
     BehaviorStatItem,
     BlockReasonItem,
     BreakdownItem,
+    ChargingFunnelOut,
     DecisionDetail,
     RegistryOption,
     SearchResultItem,
@@ -52,6 +53,23 @@ def get_summary(
         from_, to, service=service, campaign=campaign, source=source, pub_id=pub_id
     )
     return SummaryOut(**data)
+
+
+@router.get("/analytics/charging-funnel", response_model=ChargingFunnelOut)
+def get_charging_funnel(
+    from_: datetime | None = _From,
+    to: datetime | None = _To,
+    tz: str = "UTC",
+    service: str | None = None,
+    campaign: str | None = None,
+    source: str | None = None,
+    pub_id: str | None = None,
+    _claims: dict = _guard,
+) -> ChargingFunnelOut:
+    data = analytics_repo.charging_funnel(
+        from_, to, service=service, campaign=campaign, source=source, pub_id=pub_id
+    )
+    return ChargingFunnelOut(**data)
 
 
 @router.get("/analytics/timeseries", response_model=list[TimeseriesPoint])
