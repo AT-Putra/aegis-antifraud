@@ -248,6 +248,36 @@ def test_charging_funnel_from_olap(client, auth) -> None:
                       "charging_fail_breakdown", "complaints"}
 
 
+def test_charging_funnel_excludes_orphan(client, auth) -> None:
+    """ADR-023/T-31: outcome utk trx yang TAK pernah lewat Aegis (orphan) tak dihitung di
+    funnel/summary, walau TANPA filter scope (jalur default). trx dikenal tetap terhitung."""
+    ch = _ch()
+    if ch is None:
+        pytest.skip("ClickHouse tak terjangkau")
+    base = f"orph-{uuid.uuid4().hex[:8]}"
+    ts = datetime(2035, 1, 1, 6, 0, 0)  # window unik → uji UNSCOPED tanpa polusi test lain
+    trx_known = f"{base}-known"
+    trx_orphan = f"{base}-orphan"  # SENGAJA tak di-seed ke traffic_events → orphan
+    ch.insert("traffic_events", [
+        _traffic_row(trx=trx_known, service=base, decision="allow", ts=ts),
+    ], column_names=_TRAFFIC_COLS)
+    ch.insert("outcome_log", [
+        [trx_known, "subscription", "success", "", ts],
+        [trx_orphan, "subscription", "success", "", ts],  # orphan → harus diabaikan
+        [trx_orphan, "complaint", "", "", ts],             # orphan complaint → diabaikan
+    ], column_names=["trx_id", "callback_type", "charging_status",
+                     "charging_fail_reason", "received_at"])
+
+    q = {"from": "2035-01-01T00:00:00", "to": "2035-01-02T00:00:00"}  # UNSCOPED (tanpa service)
+    d = client.get("/v1/analytics/charging-funnel", params=q, headers=auth).json()
+    assert d["registration_success"] == 1  # hanya trx_known; orphan dibuang
+    assert d["charging_success"] == 1
+    assert d["complaints"] == 0            # complaint orphan tak dihitung
+
+    s = client.get("/v1/analytics/summary", params=q, headers=auth).json()
+    assert s["complaints"] == 0           # summary juga buang complaint orphan
+
+
 def test_feedback_review_mirrors_and_fraud_est(client, auth) -> None:
     """feedback accepted-robot → feedback_log → fraud_est menghitungnya."""
     ch = _ch()

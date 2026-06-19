@@ -12,7 +12,7 @@ Timezone (K2): agregat bucket dikonversi dari UTC via `toTimeZone(ts, tz)` lalu
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import clickhouse_connect
 
@@ -97,14 +97,24 @@ def _scope(params: dict, *, service=None, campaign=None, source=None, pub_id=Non
     return clauses
 
 
-def _scoped_trx_subquery(params: dict, *, lo, hi, service, campaign, source, pub_id) -> str:
-    """Subquery trx_id ber-scope dari `traffic_events` (sumber atribusi). Mutasi `params`.
+# Horizon mundur saat cek "trx dikenal Aegis" utk mengecualikan outcome ORPHAN (ADR-023):
+# trx harus ada di traffic_events dalam [awal_window − N hari, akhir_window]. N=30 menutup
+# semua latency callback realistis (billing final/no-retry) sekaligus mem-prune partisi bulanan.
+_OUTCOME_KNOWN_HORIZON_DAYS = 30
 
-    Dipakai utk meng-`IN`-kan mirror outcome_log/feedback_log → scoping berjenjang full-OLAP
-    tanpa join ke OLTP (ADR-014).
+
+def _known_trx_subquery(params: dict, *, lo, hi, service, campaign, source, pub_id) -> str:
+    """Subquery trx_id 'DIKENAL Aegis' dari `traffic_events` (ada = pernah di-scoring Aegis).
+
+    Dipakai utk meng-`IN`-kan mirror outcome_log → (a) mengecualikan ORPHAN (trx tak pernah lewat
+    Aegis, mis. postback channel lain) dari agregat — ADR-023/T-31; (b) scoping berjenjang full-OLAP
+    tanpa join OLTP (ADR-014). Window keberadaan = [lo − 30 hari, hi] agar callback sah yang
+    telat/lintas tengah malam tetap terhitung. Pakai param `lo_known` (JANGAN timpa `lo`
+    outcome-window yang dipakai filter `received_at`).
     """
-    params["lo"], params["hi"] = lo, hi
-    where = ["ts >= {lo:DateTime}", "ts < {hi:DateTime}", *_scope(
+    params["lo_known"] = lo - timedelta(days=_OUTCOME_KNOWN_HORIZON_DAYS)
+    params["hi"] = hi
+    where = ["ts >= {lo_known:DateTime}", "ts < {hi:DateTime}", *_scope(
         params, service=service, campaign=campaign, source=source, pub_id=pub_id
     )]
     return f"SELECT trx_id FROM traffic_events WHERE {' AND '.join(where)}"
@@ -121,14 +131,12 @@ def _charging_kpis(
     s = settings or get_settings()
     client = _get_client(s)
     lo, hi = _range(from_ts, to_ts)
-    scoped = any([service, campaign, source, pub_id])
     p: dict = {"lo": lo, "hi": hi}
-    # Filter received_at outcome pada window sama; bila scoped, batasi trx ke traffic ber-scope.
-    in_clause = ""
-    if scoped:
-        sub = _scoped_trx_subquery(p, lo=lo, hi=hi, service=service, campaign=campaign,
-                                   source=source, pub_id=pub_id)
-        in_clause = f" AND trx_id IN ({sub})"
+    # Filter received_at outcome pada window; trx HARUS dikenal Aegis (buang ORPHAN, ADR-023) —
+    # known-trx subquery SELALU diterapkan (+ scope bila ada).
+    sub = _known_trx_subquery(p, lo=lo, hi=hi, service=service, campaign=campaign,
+                              source=source, pub_id=pub_id)
+    in_clause = f" AND trx_id IN ({sub})"
     # count(DISTINCT trx_id): uq OLTP = (callback_type,trx_id) → tahan duplikat pra-merge
     # ReplacingMergeTree tanpa perlu FINAL.
     complaints = int(client.query(
@@ -163,13 +171,11 @@ def charging_funnel(
     s = settings or get_settings()
     client = _get_client(s)
     lo, hi = _range(from_ts, to_ts)
-    scoped = any([service, campaign, source, pub_id])
     p: dict = {"lo": lo, "hi": hi}
-    in_clause = ""
-    if scoped:
-        sub = _scoped_trx_subquery(p, lo=lo, hi=hi, service=service, campaign=campaign,
-                                   source=source, pub_id=pub_id)
-        in_clause = f" AND trx_id IN ({sub})"
+    # trx HARUS dikenal Aegis (buang ORPHAN, ADR-023) — known-trx SELALU (+ scope bila ada).
+    sub = _known_trx_subquery(p, lo=lo, hi=hi, service=service, campaign=campaign,
+                              source=source, pub_id=pub_id)
+    in_clause = f" AND trx_id IN ({sub})"
     win = ("callback_type = 'subscription' AND received_at >= {lo:DateTime} "
            f"AND received_at < {{hi:DateTime}}{in_clause}")
     row = client.query(
