@@ -24,7 +24,7 @@ export function ServiceCampaignPicker({
   service: string | null | undefined;
   campaign: string | null | undefined;
   onChange: (next: { service: string | null; campaign: string | null }) => void;
-  width?: number;
+  width?: number | string;
 }) {
   const services = useServiceOptions();
   const campaigns = useCampaignOptions(service);

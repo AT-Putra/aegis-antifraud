@@ -2,7 +2,7 @@
 // Polish 2026-06-13: field berlabel+berikon, rentang via @mantine/dates DateTimePicker,
 // tombol bersih per-field + reset semua + indikator jumlah filter aktif.
 // aria-label dipertahankan agar kontrak test FE tetap utuh.
-import { Badge, Button, Card, CloseButton, Group, Text, TextInput } from "@mantine/core";
+import { Badge, Button, Card, CloseButton, Group, SimpleGrid, Text, TextInput } from "@mantine/core";
 import { DateTimePicker } from "@mantine/dates";
 import { IconAdjustmentsHorizontal, IconFilterOff } from "@tabler/icons-react";
 
@@ -64,12 +64,14 @@ export function FilterBar({
         </Button>
       </Group>
 
-      <Group gap="sm" wrap="wrap" align="flex-end">
+      {/* Grid responsif: tiap field mengisi penuh selnya & reflow mengikuti lebar layar
+          (1 kolom di ponsel → 6 kolom di layar lebar), tak lagi menggerombol ke kiri. */}
+      <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, lg: 6 }} spacing="sm" verticalSpacing="sm">
         <ServiceCampaignPicker
           service={value.service}
           campaign={value.campaign}
           onChange={(sc) => onChange({ ...value, service: sc.service, campaign: sc.campaign })}
-          width={180}
+          width="100%"
         />
         {TEXT_FIELDS.map((f) => (
           <TextInput
@@ -82,7 +84,6 @@ export function FilterBar({
             rightSection={
               value[f.key] ? <CloseButton size="sm" aria-label={`bersihkan ${f.key}`} onClick={clear(f.key)} /> : null
             }
-            w={160}
           />
         ))}
         <DateTimePicker
@@ -92,7 +93,6 @@ export function FilterBar({
           clearable
           value={value.from ?? null}
           onChange={(v) => onChange({ ...value, from: toWire(v) })}
-          w={190}
         />
         <DateTimePicker
           label="Sampai"
@@ -101,9 +101,8 @@ export function FilterBar({
           clearable
           value={value.to ?? null}
           onChange={(v) => onChange({ ...value, to: toWire(v) })}
-          w={190}
         />
-      </Group>
+      </SimpleGrid>
     </Card>
   );
 }

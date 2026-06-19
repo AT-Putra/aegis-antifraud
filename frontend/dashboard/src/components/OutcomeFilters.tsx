@@ -24,7 +24,7 @@ export function OutcomeFilters({
 }: {
   value: OutcomeFilterValue;
   onChange: (next: OutcomeFilterValue) => void;
-  width?: number;
+  width?: number | string;
 }) {
   const showCharging = value.subscribed === "true";
   const showReason = showCharging && value.charging_status === "failed";

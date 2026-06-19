@@ -94,14 +94,16 @@ export function SearchPage() {
             )}
           </Group>
         </Group>
-        <Group gap="sm" wrap="wrap" align="flex-end" mb="sm">
+        {/* Grid responsif: dropdown kriteria mengisi penuh sel & reflow mengikuti lebar
+            layar (cascade L2/L3 OutcomeFilters menambah sel berikutnya, tetap rapi). */}
+        <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, lg: 4 }} spacing="sm" mb="sm">
           <ServiceCampaignPicker
             service={draft.service ?? null}
             campaign={draft.campaign ?? null}
             onChange={(sc) =>
               setDraft((d) => ({ ...d, service: sc.service ?? "", campaign: sc.campaign ?? "" }))
             }
-            width={200}
+            width="100%"
           />
           <Select
             label="decision"
@@ -114,7 +116,6 @@ export function SearchPage() {
             value={draft.decision ?? null}
             onChange={(v) => setDraft((d) => ({ ...d, decision: v ?? "" }))}
             clearable
-            w={160}
           />
           <Select
             label="country"
@@ -126,7 +127,6 @@ export function SearchPage() {
             searchable
             clearable
             nothingFoundMessage="Tidak ada negara"
-            w={160}
           />
           <OutcomeFilters
             value={{
@@ -135,9 +135,9 @@ export function SearchPage() {
               charging_fail_reason: draft.charging_fail_reason ?? "",
             }}
             onChange={(o) => setDraft((d) => ({ ...d, ...o }))}
-            width={180}
+            width="100%"
           />
-        </Group>
+        </SimpleGrid>
         <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="sm">
           {FIELDS.map((f) => (
             <TextInput key={f} label={f} aria-label={f} placeholder={f} value={draft[f] ?? ""} onChange={set(f)} />
