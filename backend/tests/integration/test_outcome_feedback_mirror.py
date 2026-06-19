@@ -174,7 +174,8 @@ def test_countries_endpoint(client, auth) -> None:
 
 
 def test_search_subscription_cascade_filters(client, auth) -> None:
-    """Filter outcome langganan berjenjang (T-27): subscribed→charging_status→charging_fail_reason."""
+    """Filter outcome langganan berjenjang (T-27):
+    subscribed→charging_status→charging_fail_reason."""
     ch = _ch()
     if ch is None:
         pytest.skip("ClickHouse tak terjangkau")
