@@ -107,7 +107,7 @@ export function ChargingFunnelPanel({ filters }: { filters: AnalyticsFilters }) 
             {d.charging_failed === 0 ? (
               <EmptyState label="Tidak ada kegagalan charging" icon={IconReceipt2} />
             ) : (
-              <Group align="center" gap="lg" wrap="nowrap">
+              <Group align="center" gap="xl" wrap="nowrap">
                 <DonutChart
                   h={150}
                   data={donutData}
@@ -115,21 +115,17 @@ export function ChargingFunnelPanel({ filters }: { filters: AnalyticsFilters }) 
                   chartLabel={`${idID(d.charging_failed)} gagal`}
                   thickness={18}
                 />
-                <Stack gap={6}>
-                  {FAIL_META.map((m) => {
-                    const v = d.charging_fail_breakdown[m.key] ?? 0;
-                    return (
-                      <Group key={m.key} gap="xs" wrap="nowrap">
-                        <ThemeIcon size={12} radius="xl" color={m.color} variant="filled">
-                          <span />
-                        </ThemeIcon>
-                        <Text size="sm">{m.label}</Text>
-                        <Text size="sm" fw={600}>
-                          {idID(v)}
-                        </Text>
-                      </Group>
-                    );
-                  })}
+                {/* Legenda = stat tiles (seperti "Charging sukses"): angka tebal berwarna
+                    sesuai segmen donut, label dimmed di atas → rapi & match ke ring. */}
+                <Stack gap="sm">
+                  {FAIL_META.map((m) => (
+                    <Tile
+                      key={m.key}
+                      label={m.label}
+                      value={d.charging_fail_breakdown[m.key] ?? 0}
+                      color={m.color}
+                    />
+                  ))}
                 </Stack>
               </Group>
             )}
