@@ -1,3 +1,7 @@
+// T-28: jembatan sementara — redam warn recharts3 width(-1)/height(-1) sebelum
+// React mount (cabut saat upgrade recharts >=3.9.0 stabil). Lihat file untuk detail.
+import "./lib/silenceRechartsResizeWarn";
+
 import "@mantine/core/styles.css";
 import "@mantine/charts/styles.css";
 import "@mantine/dates/styles.css";
