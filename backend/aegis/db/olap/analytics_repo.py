@@ -661,15 +661,33 @@ def _parse_breakdown(raw: str | None) -> dict:
 
 
 def recent_decisions(
-    since: datetime | None = None, *, limit=20, settings: Settings | None = None
+    since: datetime | None = None,
+    *,
+    to: datetime | None = None,
+    limit=20,
+    service: str | None = None,
+    campaign: str | None = None,
+    source: str | None = None,
+    pub_id: str | None = None,
+    settings: Settings | None = None,
 ) -> list[dict]:
-    """Feed keputusan terbaru untuk SSE (`/v1/stream`)."""
+    """Feed keputusan terbaru. Dua mode (ADR-022):
+    - **SSE live** (`/v1/stream`): `since`=watermark `ts` terakhir → ambil yang lebih baru.
+    - **Snapshot beku** (`/v1/analytics/recent`): `since`=from + `to` → rentang historis statis.
+
+    Scope berjenjang (service→campaign→source→pub_id) menyaring feed (sebelumnya diabaikan).
+    """
     s = settings or get_settings()
     params: dict = {"lim": int(limit)}
-    where = ""
+    clauses: list[str] = []
     if since is not None:
-        where = "WHERE ts > {since:DateTime}"
+        clauses.append("ts > {since:DateTime}")
         params["since"] = _naive_utc(since)
+    if to is not None:
+        clauses.append("ts <= {to:DateTime}")
+        params["to"] = _naive_utc(to)
+    clauses += _scope(params, service=service, campaign=campaign, source=source, pub_id=pub_id)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     rows = _get_client(s).query(
         "SELECT trx_id, device_id, service, source, pub_id, final_score, decision, "
         "weboptin_status, ts, campaign, reason, score_breakdown "

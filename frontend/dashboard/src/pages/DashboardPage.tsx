@@ -13,7 +13,7 @@ import { MetricsChart } from "../components/MetricsChart";
 import { PageHeader } from "../components/PageHeader";
 import { BehaviorStatsPanel, BlockReasonsPanel } from "../components/StatsPanels";
 import { EmptyState, ErrorState, LoadingRows } from "../components/StateViews";
-import { useBreakdown, useMe, useSummary } from "../hooks/queries";
+import { useBreakdown, useMe, useRecentDecisions, useSummary } from "../hooks/queries";
 import { useStream } from "../hooks/useStream";
 import { browserTz, formatTs } from "../lib/tz";
 
@@ -111,7 +111,12 @@ export function DashboardPage() {
   }, [me.data?.timezone]);
   const summary = useSummary(filters);
   const bd = useBreakdown("decision", filters);
-  const stream = useStream(true);
+  // Feed: live SSE saat rentang terbuka; BEKU (snapshot REST) saat filter waktu (`to`) aktif —
+  // ADR-022. Filter non-waktu menyaring feed tanpa membekukan (SSE reconnect terfilter).
+  const timeFrozen = !!filters.to;
+  const stream = useStream(!timeFrozen, filters);
+  const frozenFeed = useRecentDecisions(filters, timeFrozen);
+  const rawFeed = timeFrozen ? (frozenFeed.data ?? []) : stream.feed;
   const navigate = useNavigate();
 
   const [feedPage, setFeedPage] = useState(1);
@@ -122,8 +127,8 @@ export function DashboardPage() {
 
   const bdData = (bd.data ?? []).map((b) => ({ key: b.key, count: b.count }));
 
-  // Feed: 50 terbaru (buffer useStream), sort + paginate sisi-klien. Default ts desc (terbaru dulu).
-  const feedRows = useMemo(() => stream.feed.map(toFeedRow), [stream.feed]);
+  // Feed: 50 terbaru (buffer SSE live / snapshot beku), sort + paginate sisi-klien. Default ts desc.
+  const feedRows = useMemo(() => rawFeed.map(toFeedRow), [rawFeed]);
   const feedSorted = useMemo(() => {
     const key = feedSort.columnAccessor as FeedSortKey;
     const rows = [...feedRows];
@@ -144,13 +149,13 @@ export function DashboardPage() {
         description="Ringkasan lalu lintas scoring, tren keputusan, dan aktivitas terkini."
         actions={
           <Badge
-            color={stream.connected ? "teal" : "gray"}
+            color={timeFrozen ? "indigo" : stream.connected ? "teal" : "gray"}
             variant="light"
             size="lg"
             leftSection={<IconBroadcast size={13} />}
             data-testid="sse-status"
           >
-            {stream.connected ? "realtime" : "terputus"}
+            {timeFrozen ? "historis" : stream.connected ? "realtime" : "terputus"}
           </Badge>
         }
       />
@@ -204,7 +209,11 @@ export function DashboardPage() {
           records={feedPaged}
           idAccessor="trx_id"
           noRecordsText={
-            stream.connected ? "Menunggu keputusan masuk…" : "Menyambung kembali…"
+            timeFrozen
+              ? "Tidak ada keputusan pada rentang ini."
+              : stream.connected
+                ? "Menunggu keputusan masuk…"
+                : "Menyambung kembali…"
           }
           page={feedPage}
           onPageChange={setFeedPage}

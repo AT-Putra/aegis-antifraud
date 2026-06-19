@@ -32,10 +32,11 @@ const f = (x: AnalyticsFilters): Record<string, unknown> => {
   };
 };
 
-// Polling realtime komponen analytics non-feed (KPI/chart/breakdown/stats).
+// Polling realtime komponen analytics non-feed (KPI/chart/breakdown/stats) — ADR-022.
 // Hanya saat rentang "live": `to` kosong = data sampai sekarang → terus berubah.
 // Rentang historis tertutup (`to` terisi) = statis → tak perlu poll (hemat OLAP).
-const LIVE_REFETCH_MS = 20_000;
+// Filter non-waktu (service/campaign/…) masuk queryKey → tetap poll, hanya ganti scope.
+const LIVE_REFETCH_MS = 60_000;
 const liveInterval = (x: AnalyticsFilters): number | false => (x.to ? false : LIVE_REFETCH_MS);
 
 export const useMe = () => useQuery({ queryKey: ["me"], queryFn: () => api.get<Me>("/v1/users/me") });
@@ -74,6 +75,16 @@ export const useBehaviorStats = (filters: AnalyticsFilters) =>
     queryKey: ["behavior-stats", filters],
     queryFn: () => api.get<BehaviorStatItem[]>("/v1/analytics/behavior-stats", f(filters)),
     refetchInterval: liveInterval(filters),
+  });
+
+// Feed BEKU (ADR-022/D1): snapshot statis keputusan rentang [from,to] saat filter waktu aktif
+// (pengganti SSE live). Bentuk baris identik event "decision" stream → reuse `toFeedRow`.
+export const useRecentDecisions = (filters: AnalyticsFilters, enabled: boolean) =>
+  useQuery({
+    queryKey: ["recent", filters],
+    queryFn: () =>
+      api.get<Array<Record<string, unknown>>>("/v1/analytics/recent", { ...f(filters), limit: 50 }),
+    enabled,
   });
 
 export const useSearch = (params: Record<string, unknown>, enabled: boolean) =>

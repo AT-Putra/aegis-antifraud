@@ -205,6 +205,29 @@ def get_decision_detail(trx_id: str, _claims: dict = _guard) -> DecisionDetail:
     return DecisionDetail(**data)
 
 
+@router.get("/analytics/recent")
+def get_recent(
+    from_: datetime | None = _From,
+    to: datetime | None = _To,
+    tz: str = "UTC",
+    service: str | None = None,
+    campaign: str | None = None,
+    source: str | None = None,
+    pub_id: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    _claims: dict = _guard,
+) -> list[dict]:
+    """Snapshot statis feed keputusan untuk rentang `[from,to]` (ADR-022/D1).
+
+    Dipakai dashboard sebagai **feed beku** saat filter waktu aktif (pengganti SSE live).
+    Bentuk baris identik dengan event `decision` di `/v1/stream`.
+    """
+    return analytics_repo.recent_decisions(
+        since=from_, to=to, limit=limit,
+        service=service, campaign=campaign, source=source, pub_id=pub_id,
+    )
+
+
 def _sse(payload: dict, event: str) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, default=str)}\n\n"
 
@@ -220,18 +243,21 @@ def stream(
     limit: int | None = Query(default=None, ge=1),  # batas iterasi (uji); None = kontinu
     _claims: dict = _guard,
 ) -> StreamingResponse:
-    """SSE: snapshot KPI bergulir + feed keputusan terbaru (K3, polling ~`interval` dtk)."""
+    """SSE: feed keputusan terbaru, filter-aware (K3, polling ~`interval` dtk).
+
+    Murni feed (ADR-022): event `kpi` dihapus — KPI/agregat pindah ke REST polling agar
+    menghormati filter waktu & tak menjalankan agregasi all-time tiap 2 dtk per koneksi.
+    """
 
     def gen() -> Iterator[str]:
         last_ts: datetime | None = None
         count = 0
         while True:
             try:
-                kpi = analytics_repo.summary(
-                    None, None, service=service, campaign=campaign, source=source, pub_id=pub_id
+                recent = analytics_repo.recent_decisions(
+                    since=last_ts, limit=50,
+                    service=service, campaign=campaign, source=source, pub_id=pub_id,
                 )
-                yield _sse(kpi, "kpi")
-                recent = analytics_repo.recent_decisions(since=last_ts, limit=50)
                 for row in reversed(recent):  # kronologis lama→baru
                     yield _sse(row, "decision")
                     last_ts = row["ts"]

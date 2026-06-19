@@ -265,12 +265,53 @@ def test_stream_emits_event(ch, client, auth) -> None:
     ]], column_names=[*_DLOG_COLS, "campaign", "reason", "score_breakdown"])
     r = client.get("/v1/stream", params={"limit": 1}, headers=auth)
     assert r.status_code == 200
-    assert "event: kpi" in r.text
+    assert "event: decision" in r.text
+    assert "event: kpi" not in r.text  # ADR-022: stream murni feed, event kpi dihapus
     # Feed decision membawa campaign (bug sebelumnya: kosong) + reason + score_breakdown.
     assert camp in r.text
     assert "rule:webdriver" in r.text
     assert "isolation_forest" in r.text
     assert "lightgbm" in r.text
+
+
+def test_stream_scope_filters_feed(ch, client, auth) -> None:
+    # ADR-022: scope service/campaign/source/pub_id kini menyaring feed (dulu diabaikan).
+    svc_a = f"ana-sa-{uuid.uuid4().hex[:8]}"
+    svc_b = f"ana-sb-{uuid.uuid4().hex[:8]}"
+    trx_a, trx_b = f"t-{uuid.uuid4().hex[:8]}", f"t-{uuid.uuid4().hex[:8]}"
+    rows = [
+        [trx_a, "d", svc_a, "fb", "1", 0.9, "block", "na", 1, 0,
+         datetime(2099, 1, 1, 6, 0, 0), "c", "r", "{}"],
+        [trx_b, "d", svc_b, "fb", "1", 0.9, "block", "na", 1, 0,
+         datetime(2099, 1, 1, 6, 0, 0), "c", "r", "{}"],
+    ]
+    ch.insert("decision_log", rows,
+              column_names=[*_DLOG_COLS, "campaign", "reason", "score_breakdown"])
+    r = client.get("/v1/stream", params={"limit": 1, "service": svc_a}, headers=auth)
+    assert r.status_code == 200
+    assert trx_a in r.text
+    assert trx_b not in r.text  # baris service lain tersaring
+
+
+def test_recent_endpoint_window_and_scope(ch, client, auth) -> None:
+    # ADR-022/D1: feed BEKU = snapshot REST rentang [from,to] (pengganti SSE saat filter waktu).
+    svc = f"ana-rc-{uuid.uuid4().hex[:8]}"
+    trx_in, trx_out = f"t-{uuid.uuid4().hex[:8]}", f"t-{uuid.uuid4().hex[:8]}"
+    rows = [
+        [trx_in, "d", svc, "fb", "1", 0.5, "allow", "na", 1, 0,
+         datetime(2098, 6, 1, 12, 0, 0), "c", "r", "{}"],
+        [trx_out, "d", svc, "fb", "1", 0.5, "allow", "na", 1, 0,
+         datetime(2099, 1, 1, 0, 0, 0), "c", "r", "{}"],
+    ]
+    ch.insert("decision_log", rows,
+              column_names=[*_DLOG_COLS, "campaign", "reason", "score_breakdown"])
+    r = client.get("/v1/analytics/recent", headers=auth, params={
+        "from": "2098-01-01T00:00:00", "to": "2098-12-31T23:59:59", "service": svc,
+    })
+    assert r.status_code == 200
+    ids = [row["trx_id"] for row in r.json()]
+    assert trx_in in ids
+    assert trx_out not in ids  # di luar rentang waktu → tersaring
 
 
 def test_requires_auth(ch, client) -> None:
