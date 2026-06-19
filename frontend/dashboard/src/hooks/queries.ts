@@ -32,12 +32,19 @@ const f = (x: AnalyticsFilters): Record<string, unknown> => {
   };
 };
 
+// Polling realtime komponen analytics non-feed (KPI/chart/breakdown/stats).
+// Hanya saat rentang "live": `to` kosong = data sampai sekarang → terus berubah.
+// Rentang historis tertutup (`to` terisi) = statis → tak perlu poll (hemat OLAP).
+const LIVE_REFETCH_MS = 20_000;
+const liveInterval = (x: AnalyticsFilters): number | false => (x.to ? false : LIVE_REFETCH_MS);
+
 export const useMe = () => useQuery({ queryKey: ["me"], queryFn: () => api.get<Me>("/v1/users/me") });
 
 export const useSummary = (filters: AnalyticsFilters) =>
   useQuery({
     queryKey: ["summary", filters],
     queryFn: () => api.get<Summary>("/v1/analytics/summary", f(filters)),
+    refetchInterval: liveInterval(filters),
   });
 
 export const useTimeseries = (metric: string, granularity: string, filters: AnalyticsFilters) =>
@@ -45,24 +52,28 @@ export const useTimeseries = (metric: string, granularity: string, filters: Anal
     queryKey: ["timeseries", metric, granularity, filters],
     queryFn: () =>
       api.get<TimeseriesPoint[]>("/v1/analytics/timeseries", { metric, granularity, ...f(filters) }),
+    refetchInterval: liveInterval(filters),
   });
 
 export const useBreakdown = (dimension: string, filters: AnalyticsFilters) =>
   useQuery({
     queryKey: ["breakdown", dimension, filters],
     queryFn: () => api.get<BreakdownItem[]>("/v1/analytics/breakdown", { dimension, ...f(filters) }),
+    refetchInterval: liveInterval(filters),
   });
 
 export const useBlockReasons = (filters: AnalyticsFilters, limit = 10) =>
   useQuery({
     queryKey: ["block-reasons", filters, limit],
     queryFn: () => api.get<BlockReasonItem[]>("/v1/analytics/block-reasons", { ...f(filters), limit }),
+    refetchInterval: liveInterval(filters),
   });
 
 export const useBehaviorStats = (filters: AnalyticsFilters) =>
   useQuery({
     queryKey: ["behavior-stats", filters],
     queryFn: () => api.get<BehaviorStatItem[]>("/v1/analytics/behavior-stats", f(filters)),
+    refetchInterval: liveInterval(filters),
   });
 
 export const useSearch = (params: Record<string, unknown>, enabled: boolean) =>

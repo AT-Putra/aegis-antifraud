@@ -16,7 +16,7 @@ import { AuthProvider } from "./auth/AuthContext";
 import { theme } from "./theme";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } },
 });
 
 createRoot(document.getElementById("root")!).render(
