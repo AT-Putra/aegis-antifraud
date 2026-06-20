@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   Code,
+  CopyButton,
   Grid,
   Group,
   Progress,
@@ -21,7 +22,9 @@ import {
 import {
   IconActivity,
   IconAlertTriangle,
+  IconCheck,
   IconCode,
+  IconCopy,
   IconCpu,
   IconDeviceMobile,
   IconInfoCircle,
@@ -98,6 +101,28 @@ function FlagCard({ trxId }: { trxId: string }) {
 }
 
 const n3 = (v: number | null | undefined) => (typeof v === "number" ? v.toFixed(3) : "—");
+
+// Tombol salin JSON ke clipboard (F-11). Diletakkan di dalam panel agar tak memicu toggle
+// accordion. Feedback visual: "Salin JSON" → "Tersalin" (teal) selama timeout.
+function CopyJsonButton({ value, label, testId }: { value: string; label: string; testId: string }) {
+  return (
+    <CopyButton value={value} timeout={1500}>
+      {({ copied, copy }) => (
+        <Button
+          size="xs"
+          variant="light"
+          color={copied ? "teal" : "indigo"}
+          leftSection={copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+          onClick={copy}
+          aria-label={label}
+          data-testid={testId}
+        >
+          {copied ? "Tersalin" : "Salin JSON"}
+        </Button>
+      )}
+    </CopyButton>
+  );
+}
 
 // Penjelasan audit-grade: kenapa skor rules tersusun begitu + komposisi final_score.
 function ExplainabilitySection({ ex }: { ex: Explainability }) {
@@ -272,6 +297,8 @@ export function DecisionPage() {
   const dev = d.device_info ?? {};
   const outcome = d.outcome ?? {};
   const threshold = typeof outcome.threshold_used === "number" ? outcome.threshold_used : null;
+  const signalsJson = JSON.stringify(d.signals ?? {}, null, 2);
+  const rawJson = JSON.stringify(d, null, 2);
 
   return (
     <Stack>
@@ -395,13 +422,19 @@ export function DecisionPage() {
         <Accordion.Item value="signals">
           <Accordion.Control icon={<IconCode size={16} />}>Signals (data mentah)</Accordion.Control>
           <Accordion.Panel>
-            <Code block>{JSON.stringify(d.signals ?? {}, null, 2)}</Code>
+            <Group justify="flex-end" mb="xs">
+              <CopyJsonButton value={signalsJson} label="Salin signals JSON" testId="copy-signals" />
+            </Group>
+            <Code block>{signalsJson}</Code>
           </Accordion.Panel>
         </Accordion.Item>
         <Accordion.Item value="raw">
           <Accordion.Control icon={<IconCode size={16} />}>Seluruh respons (JSON mentah)</Accordion.Control>
           <Accordion.Panel>
-            <Code block>{JSON.stringify(d, null, 2)}</Code>
+            <Group justify="flex-end" mb="xs">
+              <CopyJsonButton value={rawJson} label="Salin seluruh respons JSON" testId="copy-raw" />
+            </Group>
+            <Code block>{rawJson}</Code>
           </Accordion.Panel>
         </Accordion.Item>
       </Accordion>
