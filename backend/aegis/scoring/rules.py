@@ -18,10 +18,10 @@ _DEFAULT_HARD_RULES = (
 )
 
 # Faktor skor risiko kontinu: (nama_fitur, label, bobot). Sumber tunggal formula —
-# `rules_risk = max(0.0, min(1.0, Σ bobot·nilai))`. Bobot positif = menaikkan risiko;
-# bobot negatif = pengurang. Operator seluler ID (sinyal POSITIF pelanggan asli) diberi
-# pengurang BERNILAI MINIMUM (-0.05) — hanya menggeser kasus borderline; tak menyelamatkan
-# bot ber-automasi (hard-rule tetap blok instan) maupun skor jelas-tinggi (tetap > ambang).
+# `rules_risk = max(0.0, min(1.0, Σ bobot·nilai))`. Bobot positif = menaikkan risiko.
+# CATATAN ADR-024: operator seluler ID DULU pengurang (-0.05) — DICABUT (bobot 0.0):
+# fraud kini rutin memakai koneksi operator (suspect2/ADR-021 malah dapat diskon), jadi
+# "operator = pelanggan sah" tak lagi relevan. Fitur TETAP dicatat (audit/ML) tapi netral.
 # JANGAN duplikasi bobot di tempat lain.
 SOFT_FACTORS: tuple[tuple[str, str, float], ...] = (
     ("automation_score", "Skor automasi", 0.2),
@@ -35,9 +35,15 @@ SOFT_FACTORS: tuple[tuple[str, str, float], ...] = (
     ("ip_tz_geo_mismatch", "Timezone ≠ benua IP", 0.2),
     ("mouse_on_touchless", "Mouse di device tanpa touch", 0.2),
     ("color_depth_anomaly", "colorDepth ganjil", 0.1),
+    # Konsistensi hardware↔klaim dua-arah (ADR-024) — anti UA-spoof desktop & OS-family.
+    ("fp_claims_desktop_but_mobile", "FP mobile tapi klaim desktop", 0.3),
+    ("os_hw_family_mismatch", "OS klaim ≠ keluarga hardware", 0.3),
+    # Entropi fingerprint (ADR-025) — audio+fonts kosong = fingerprint terlalu bersih (emulator).
+    ("low_fp_entropy", "Fingerprint entropi-rendah (emulator)", 0.2),
     # Velocity / behavioral-collision (ADR-021) — farm replay template behavior.
     ("behavior_cluster", "Kluster perilaku identik (farm)", 0.5),
-    ("ip_is_mobile_carrier", "Operator seluler (pengurang)", -0.05),
+    # Operator seluler: dicatat, netral (bobot 0.0) sejak ADR-024 — lihat catatan di atas.
+    ("ip_is_mobile_carrier", "Operator seluler (netral)", 0.0),
 )
 
 # Spesifikasi hard-rule: nama → (fitur, predikat). Predikat True → rule terpicu.

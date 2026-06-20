@@ -21,7 +21,9 @@ EXPLAIN_VERSION = "1"
 _RULES_FORMULA = (
     "rules_risk = max(0.0, min(1.0, "
     "0.2·automation_score + 0.3·webview_risk + 0.3·ip_is_datacenter "
-    "+ 0.2·ip_is_vpn_proxy_tor + 0.2·no_behavior - 0.05·ip_is_mobile_carrier))"
+    "+ 0.2·ip_is_vpn_proxy_tor + 0.2·no_behavior "
+    "+ 0.3·fp_claims_desktop_but_mobile + 0.3·os_hw_family_mismatch "
+    "+ 0.2·low_fp_entropy))"
 )
 
 _COMPONENT_WEIGHT_KEY = {

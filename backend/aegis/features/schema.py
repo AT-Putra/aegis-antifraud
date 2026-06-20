@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from aegis.schemas.scoring import Signals
 
-FEATURE_VERSION = "2"  # 1→2: fitur konsistensi/anti-emulasi (ADR-020, 2026-06-18)
+FEATURE_VERSION = "4"  # 3→4: entropi fingerprint + sinyal entropi-tinggi (ADR-025, 2026-06-20)
 
 # Urutan TETAP — model dilatih & meng-inference dengan urutan ini. Jangan ubah
 # urutan/elemen tanpa menaikkan FEATURE_VERSION (cocokkan dengan model_versions).
@@ -28,6 +28,10 @@ FEATURE_ORDER: list[str] = [
     "ip_tz_geo_mismatch", "ip_reputation_bad",
     # konsistensi / anti-emulasi (ADR-020)
     "ua_fp_inconsistent", "campaign_geo_mismatch", "color_depth_anomaly", "mouse_on_touchless",
+    # konsistensi hardware↔klaim dua-arah (ADR-024)
+    "fp_claims_desktop_but_mobile", "os_hw_family_mismatch",
+    # entropi fingerprint & sinyal entropi-tinggi (ADR-025)
+    "low_fp_entropy", "has_audio", "device_pixel_ratio", "languages_count", "dwell_ms",
     # velocity / behavioral-collision (ADR-021)
     "behavior_cluster",
     # attribution & history

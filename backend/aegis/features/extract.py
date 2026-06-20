@@ -13,6 +13,10 @@ _KNOWN_INAPP = {"facebook", "instagram", "tiktok", "line"}
 # Platform desktop (navigator.platform) — token khas non-mobile. Android asli =
 # "Linux armv8l"/"Linux aarch64"; desktop Linux = "Linux x86_64" (server/emulator).
 _DESKTOP_PLATFORM_TOKENS = ("x86", "win", "mac", "wow64")
+# Token hardware mobile (navigator.platform ARM) & keluarga GPU (webgl.renderer) — ADR-024.
+_ARM_PLATFORM_TOKENS = ("arm", "aarch64", "armv")
+_MOBILE_GPU_TOKENS = ("adreno", "mali", "powervr")  # GPU khas HP Android
+_APPLE_GPU_TOKENS = ("apple",)  # GPU iOS
 _NORMAL_COLOR_DEPTHS = {24, 30, 32}
 _CLUSTER_K = 3  # ≥K device_id berbeda berbagi signature behavior identik = farm (ADR-021)
 
@@ -42,6 +46,23 @@ def _claims_mobile(device_info: dict, ua_data: dict) -> bool:
     if device_info.get("os") in ("Android", "iOS"):
         return True
     return ua_data.get("mobile") is True
+
+
+def _infer_hw_class(fp) -> dict:
+    """Kelas hardware yang DISIMPULKAN dari fingerprint (ADR-024). Murni — token string.
+
+    `platform` ARM/`armv81`/`aarch64` & GPU Adreno/Mali/PowerVR = HP Android; GPU Apple = iOS.
+    Dipakai bersama oleh deteksi mismatch dua-arah (klaim desktop vs hardware mobile, dan
+    mismatch keluarga-OS) agar logika hardware tak terduplikasi.
+    """
+    platform = (fp.platform or "").lower()
+    renderer = ((fp.webgl.renderer if fp.webgl else "") or "").lower()
+    return {
+        "arm_platform": any(t in platform for t in _ARM_PLATFORM_TOKENS),
+        "mobile_gpu": any(g in renderer for g in _MOBILE_GPU_TOKENS),
+        "apple_gpu": any(g in renderer for g in _APPLE_GPU_TOKENS),
+        "touch": (fp.maxTouchPoints or 0) > 0,
+    }
 
 
 def _tz_geo_mismatch(timezone: str | None, continent: str | None) -> bool:
@@ -120,8 +141,33 @@ def extract_features(inp: FeatureInput) -> dict[str, float]:
     )
     mouse_on_touchless = _b(move_count > 0 and max_touch == 0 and claims_mobile)
 
+    # --- konsistensi hardware↔klaim DUA-ARAH (ADR-024) ---
+    hw = _infer_hw_class(fp)
+    hw_is_mobile = hw["arm_platform"] or hw["mobile_gpu"]
+    # (1) Klaim non-mobile (desktop/UA-CH mobile=false) tapi hardware jelas mobile/Android.
+    #     Basis = platform ARM ∥ GPU mobile (kuat & tak ambigu). Touch SENGAJA tak dipakai
+    #     sebagai pemicu berdiri-sendiri: laptop 2-in-1 layar-sentuh = false-positive.
+    claims_nonmobile = di.get("device_type") == "desktop" or ua_mobile_false
+    fp_claims_desktop_but_mobile = _b(claims_nonmobile and hw_is_mobile)
+    # (2) Mismatch keluarga-OS: klaim iOS tapi hardware Android, atau klaim Android tapi GPU Apple.
+    os_claim = di.get("os")
+    os_hw_family_mismatch = _b(
+        (os_claim == "iOS" and (hw["arm_platform"] or hw["mobile_gpu"]) and not hw["apple_gpu"])
+        or (os_claim == "Android" and hw["apple_gpu"])
+    )
+
     color_depth = fp.screen.colorDepth if fp.screen else None
     color_depth_anomaly = _b(bool(color_depth) and color_depth not in _NORMAL_COLOR_DEPTHS)
+
+    # --- entropi fingerprint & sinyal entropi-tinggi (ADR-025) ---
+    has_audio = _b(fp.audio_hash)
+    fonts_empty = not fp.fonts
+    # Fingerprint "terlalu bersih": audio kosong DAN fonts kosong (khas emulator/headless).
+    # Valid hanya bila collector pre-landing benar-benar mengisi audio/fonts (lihat ADR-025).
+    low_fp_entropy = _b(not fp.audio_hash and fonts_empty)
+    device_pixel_ratio = float(fp.screen.devicePixelRatio or 0.0) if fp.screen else 0.0
+    languages_count = float(len(fp.languages or []))
+    dwell_ms = float(timing.get("dwell_ms", 0) or 0)
 
     tz_geo_mismatch = _b(_tz_geo_mismatch(fp.timezone, ip.get("continent")))
 
@@ -172,6 +218,13 @@ def extract_features(inp: FeatureInput) -> dict[str, float]:
         "campaign_geo_mismatch": campaign_geo_mismatch,
         "color_depth_anomaly": color_depth_anomaly,
         "mouse_on_touchless": mouse_on_touchless,
+        "fp_claims_desktop_but_mobile": fp_claims_desktop_but_mobile,
+        "os_hw_family_mismatch": os_hw_family_mismatch,
+        "low_fp_entropy": low_fp_entropy,
+        "has_audio": has_audio,
+        "device_pixel_ratio": device_pixel_ratio,
+        "languages_count": languages_count,
+        "dwell_ms": dwell_ms,
         "behavior_cluster": behavior_cluster,
         "referrer_present": _b(getattr(attr, "referrer", None)),
         "locale_consistent": _b(getattr(attr, "locale_consistent", None)),

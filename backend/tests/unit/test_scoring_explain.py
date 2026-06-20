@@ -115,17 +115,14 @@ def test_build_full_object_shape() -> None:
     assert "rules" in obj and "blend" in obj and obj["rationale"]
 
 
-# --- Pengurang risiko operator seluler ID (nilai minimum -0.05) ---
+# --- Operator seluler ID: NETRAL sejak ADR-024 (dulu pengurang -0.05) ---
 
 
-def test_mobile_carrier_discounts_soft_score() -> None:
-    # no_behavior=1.0 (×0.2)=0.2; + operator seluler (-0.05) = 0.15.
+def test_mobile_carrier_is_neutral() -> None:
+    # ADR-024: fraud kini rutin pakai koneksi operator → diskon dicabut. Bobot 0 → skor
+    # TAK berubah dgn/tanpa flag operator (tetap dicatat sbg fitur, hanya netral).
     assert soft_score({"no_behavior": 1.0}) == 0.2
-    assert abs(soft_score({"no_behavior": 1.0, "ip_is_mobile_carrier": 1.0}) - 0.15) < 1e-9
-
-
-def test_mobile_carrier_clamped_non_negative() -> None:
-    # Hanya operator seluler tanpa risiko lain → skor tak boleh negatif.
+    assert soft_score({"no_behavior": 1.0, "ip_is_mobile_carrier": 1.0}) == 0.2
     assert soft_score({"ip_is_mobile_carrier": 1.0}) == 0.0
 
 
@@ -137,7 +134,8 @@ def test_mobile_carrier_does_not_rescue_hard_block() -> None:
 
 
 def test_mobile_carrier_factor_in_explain() -> None:
+    # Faktor tetap muncul di explainability (audit) tapi kontribusi 0.
     exp = explain_rules({"no_behavior": 1.0, "ip_is_mobile_carrier": 1.0})
     contrib = {f["name"]: f["contribution"] for f in exp["factors"]}
-    assert abs(contrib["ip_is_mobile_carrier"] - (-0.05)) < 1e-9
-    assert abs(exp["soft_score"] - 0.15) < 1e-9
+    assert contrib["ip_is_mobile_carrier"] == 0.0
+    assert abs(exp["soft_score"] - 0.2) < 1e-9
