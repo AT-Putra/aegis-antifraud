@@ -3,6 +3,7 @@
 import { type ApiError, score, sessionInit } from "./api";
 import { type Params, ParamError, parseParams } from "./params";
 import { BehaviorTracker, collectSignals } from "./signals";
+import { primeAudioFingerprint } from "./signals/fingerprint";
 import * as ui from "./ui";
 
 const INIT_ERRORS: Record<string, string> = {
@@ -37,6 +38,7 @@ export async function run(opts: {
 
   const tracker = new BehaviorTracker();
   tracker.start_tracking();
+  primeAudioFingerprint(); // mulai render audio fingerprint dini (siap sinkron saat CTA) — ADR-025
 
   let token: string;
   try {
