@@ -360,14 +360,18 @@ def timeseries(
     where = ["ts >= {lo:DateTime}", "ts < {hi:DateTime}", *_scope(
         params, service=service, campaign=campaign, source=source, pub_id=pub_id
     )]
+    # Format bucket sbg STRING wall-time naif di `tz` (bukan DateTime) — cegah clickhouse-connect
+    # menormalkan DateTime('tz') kembali ke UTC di kabel (bug chart tampil UTC). Frontend
+    # `formatBucket` memaknai string naif ini sbg wall-time tz apa adanya (ADR-017).
     rows = _get_client(s).query(
-        f"SELECT {bucket_fn}(toTimeZone(ts, {{tz:String}})) AS bucket, "
+        f"SELECT formatDateTime({bucket_fn}(toTimeZone(ts, {{tz:String}})), "
+        f"'%Y-%m-%dT%H:%i:%S') AS bucket, "  # %i=menit (ClickHouse); %M=nama bulan!
         f"{_METRIC_AGG[metric]} AS value "
         f"FROM traffic_events WHERE {' AND '.join(where)} "
         "GROUP BY bucket ORDER BY bucket",
         parameters=params,
     ).result_rows
-    return [{"bucket_ts": r[0], "value": float(r[1])} for r in rows]
+    return [{"bucket_ts": str(r[0]), "value": float(r[1])} for r in rows]
 
 
 def breakdown(

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import clickhouse_connect
 import psycopg
@@ -133,9 +133,12 @@ def test_summary_and_search_shape(ch, client, auth) -> None:
 def test_timeseries_timezone_bucket(ch, client, auth) -> None:
     """ts 2030-05-01 18:30 UTC → WIB 2030-05-02 → bucket harian harus 02 Mei (K2)."""
     svc = f"ana-tz-{uuid.uuid4().hex[:8]}"
+    # ts tz-aware UTC: clickhouse-connect memperlakukan datetime NAIF sbg tz-lokal mesin
+    # (→ shift, bikin flaky lintas-env). Aware-UTC tersimpan eksak 18:30 UTC → WIB 02 Mei.
     ch.insert("traffic_events", [
         _traffic_row(trx=f"t-{uuid.uuid4().hex[:8]}", service=svc, source="fb",
-                     pub_id="1", decision="allow", ts=datetime(2030, 5, 1, 18, 30, 0)),
+                     pub_id="1", decision="allow",
+                     ts=datetime(2030, 5, 1, 18, 30, 0, tzinfo=UTC)),
     ], column_names=_TRAFFIC_COLS)
     pts = client.get("/v1/analytics/timeseries", headers=auth, params={
         "metric": "total", "granularity": "day", "tz": "Asia/Jakarta", "service": svc,
