@@ -7,3 +7,10 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+## LSP
+When tracing where a symbol is defined or finding all references to it, use LSP (goToDefinition, findReferences, hover) instead of Grep. LSP gives exact results; Grep gives text matches.
+
+Use Grep/Glob for discovery (finding files, searching patterns). Use LSP for understanding (definitions, references, type info).
+
+After locating a file with Grep/Glob, use LSP to navigate within it rather than reading the whole file.
