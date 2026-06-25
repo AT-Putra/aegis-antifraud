@@ -15,6 +15,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import clickhouse_connect
+from clickhouse_connect.driver import httputil
 
 from aegis.config import Settings, get_settings
 from aegis.db.postgres import connection
@@ -62,6 +63,11 @@ def _get_client(s: Settings):
             # same session"). Query kita murni agregasi stateless → matikan session id agar
             # tiap query = request HTTP independen (aman konkuren).
             autogenerate_session_id=False,
+            # Dashboard menembak ~10 query analitik paralel pada klien bersama ini; pool
+            # urllib3 default (maxsize=8) penuh saat burst → urllib3 WARNING "Connection
+            # pool is full" + koneksi ekstra dibuka lalu dibuang (tak di-reuse). Naikkan
+            # maxsize ke 16 (≥ jumlah query paralel) agar koneksi keep-alive dipakai ulang.
+            pool_mgr=httputil.get_pool_manager(maxsize=16),
         )
     return _client
 
