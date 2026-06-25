@@ -22,7 +22,7 @@ import time
 from aegis.db.redis import get_redis
 from aegis.schemas.scoring import Behavior
 
-WINDOW_SECONDS = 3600  # 60 menit (tunable)
+WINDOW_SECONDS = 86400  # 24 jam (tunable)
 
 
 def behavior_signature(behavior: Behavior | None) -> str | None:
